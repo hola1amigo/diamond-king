@@ -81,7 +81,7 @@ function createGameServer({ now = Date.now } = {}) {
     if (room.phase === "finished") room.newRules = [];
     const eliminated = active.filter(p => p.eliminated).map(p => ({ ...identity(p), score: p.score }));
     room.scoreAnnouncementUntil = now() + 12000;
-    room.announcementUntil = room.scoreAnnouncementUntil + (room.newRules.length ? 12000 : 0);
+    room.announcementUntil = room.scoreAnnouncementUntil + (room.newRules.length || remaining.length === 1 ? 12000 : 0);
     room.deadline = null;
     room.result = { round: room.round, average: average === null ? null : Number(average.toFixed(4)), target: target === null ? null : Number(target.toFixed(4)),
       values: active.map(p => ({ ...identity(p), value: p.value })), winners: winners.map(identity), duplicated,

@@ -15,21 +15,26 @@ function showAnnouncement(state) {
   if (!state?.result) return;
   const serverTime = state.serverNow + performance.now() - syncedAt;
   const scoring = serverTime < state.scoreAnnouncementUntil;
+  const victory = !scoring && Boolean(state.result.finalWinner);
   const active = serverTime < state.announcementUntil;
   if (!active) {
     if (announcement.open) { announcement.close(); controls(); }
     return;
   }
   // New rules are supplied by the server only after the scoring broadcast ends.
-  if (!scoring && !state.newRules.length) return;
-  const key = `${code}:${state.round}:${scoring ? "score" : "rules"}`;
+  if (!scoring && !victory && !state.newRules.length) return;
+  const key = `${code}:${state.round}:${scoring ? "score" : victory ? "victory" : "rules"}`;
   if (key !== announcementKey) {
     announcementKey = key;
-    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : "追加规则公布");
+    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束 · 胜利播报" : "追加规则公布");
     const eliminated = state.result.eliminated || [];
     setText("#announcementEliminated", scoring && eliminated.length ? `本轮淘汰：${eliminated.map(p => `${p.seat} 号 ${p.name}（${p.score} 分）`).join("、")}` : "");
     const score = document.querySelector("#announcementScore");
-    score.hidden = !scoring;
+    score.hidden = !scoring && !victory;
+    if (victory) {
+      const winner = state.result.finalWinner;
+      score.innerHTML = `<p class="ok">恭喜 ${winner.seat} 号玩家 ${escapeHtml(winner.name)} 获得胜利！</p><p>方片 K 挑战结束。</p>`;
+    }
     if (scoring) {
       const r = state.result;
       const label = p => `${p.seat} 号 ${escapeHtml(p.name)}`;
@@ -41,11 +46,11 @@ function showAnnouncement(state) {
         <p>${r.losses.map(p => `${label(p)}：扣 ${p.deduction} 分，累计 ${state.players.find(player => player.seat === p.seat).score} 分`).join("<br>")}</p>
         ${r.finalWinner ? `<p class="ok">${label(r.finalWinner)} 获得最终胜利。</p>` : r.allEliminated ? "<p>全员淘汰，本局无最终胜者。</p>" : ""}`;
     }
-    renderRules(document.querySelector("#announcementRules"), scoring ? [] : state.newRules);
+    renderRules(document.querySelector("#announcementRules"), scoring || victory ? [] : state.newRules);
     if (!announcement.open) announcement.showModal();
   }
   const seconds = Math.max(0, Math.ceil(((scoring ? state.scoreAnnouncementUntil : state.announcementUntil) - serverTime) / 1000));
-  setText("#announcementCountdown", `${seconds} 秒后${scoring && state.announcementUntil > state.scoreAnnouncementUntil ? "播报追加规则" : "关闭"}；播报期间不会进入下一轮。`);
+  setText("#announcementCountdown", `${seconds} 秒后${scoring && state.announcementUntil > state.scoreAnnouncementUntil ? state.result.finalWinner ? "播报最终胜利" : "播报追加规则" : "关闭"}${state.phase === "finished" ? "。" : "；播报期间不会进入下一轮。"}`);
 }
 setInterval(() => showAnnouncement(latest), 200);
 let latest = null;

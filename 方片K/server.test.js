@@ -209,7 +209,7 @@ test("solo demo is isolated and unlocks rules with a mandatory 12-second announc
     const s = await res.json();
     assert.equal(s.result.eliminated.length, 1);
     assert.equal(s.scoreAnnouncementUntil - s.serverNow, 12000);
-    assert.equal(s.announcementUntil - s.serverNow, round < 3 ? 24000 : 12000);
+    assert.equal(s.announcementUntil - s.serverNow, 24000);
     assert.equal(s.newRules.length, 0);
     assert.equal((await step(round + 1)).status, 409);
     if (round === 3) { assert.equal(s.me.eliminated, true); assert.equal(s.phase, 'finished'); }
