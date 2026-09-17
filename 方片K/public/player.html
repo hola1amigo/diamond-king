@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>玩家端 - 方片 K</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <header><div><h1>方片 K</h1><p class="muted" id="roomInfo">连接中</p></div><div class="chip" id="roundChip">等待开始</div></header>
+    <section class="panel stack">
+      <h2 id="nameTitle">座位</h2>
+      <p id="timer" role="timer">等待同步</p>
+      <div class="grid">
+        <div><label for="nameInput">姓名（开局前可修改）</label><input id="nameInput" maxlength="16"></div>
+        <div><label for="valueInput">本轮数字（0～100，最多两位小数）</label><input id="valueInput" type="number" min="0" max="100" step="0.01" disabled></div>
+      </div>
+      <div class="actions">
+        <button id="saveNameBtn" disabled>保存姓名</button>
+        <button id="readyBtn" class="primary" disabled>准备</button>
+        <button id="submitBtn" class="primary" disabled>确认提交（不可修改）</button>
+      </div>
+      <p class="muted" id="myStatus" aria-live="polite">等待同步。</p>
+      <p class="danger" id="error" aria-live="polite"></p><a href="/">返回首页／重新加入</a><p class="muted">开局前离线超过两分钟会释放座位。对局中离线不会暂停计时；同一浏览器重新加入可恢复座位。</p>
+    </section>
+    <section class="panel" id="newRulesPanel" style="margin-top:16px" hidden>
+      <h2>追加规则</h2><ol id="newRules"></ol><p>按顺序阅读以上新规则，点击“已读规则，准备下一轮”确认。下一轮限时 5 分钟。</p>
+    </section>
+    <section class="panel" style="margin-top:16px"><h3>玩家状态</h3><div class="players" id="players"></div></section>
+    <section class="grid" style="margin-top:16px">
+      <div class="panel"><h3>当前规则</h3><ol class="rules" id="rules"></ol></div>
+      <div class="panel"><h3>本轮结果</h3><div id="result"></div></div>
+    </section>
+    <section class="panel" style="margin-top:16px"><h3>历史记录</h3><div class="history" id="history"></div></section>
+  </main>
+  <script src="/app.js"></script>
+  <script src="/player.js"></script>
+</body>
+</html>
+

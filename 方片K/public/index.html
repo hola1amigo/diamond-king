@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>方片 K 五人网络版</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app narrow">
+    <header><div><h1>方片 K</h1><p class="muted">输入昵称，自动加入未满的房间。五人全部准备后开始，无需裁判。</p></div></header>
+    <section class="panel stack">
+      <h2>加入游戏</h2>
+      <form id="joinForm" class="stack">
+        <label for="nickname">你的昵称</label>
+        <input id="nickname" maxlength="16" required autocomplete="nickname">
+        <button class="primary" id="joinBtn" type="submit">加入游戏</button>
+      </form>
+      <p class="muted">朋友们打开同一个网址即可。房间满员后，新玩家会进入下一个房间；同一浏览器会恢复原座位。</p>
+      <p id="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+  <script src="/lobby.js"></script>
+</body>
+</html>

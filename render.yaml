@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: diamond-king
+    runtime: node
+    plan: free
+    rootDir: 方片K
+    buildCommand: npm test
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+
