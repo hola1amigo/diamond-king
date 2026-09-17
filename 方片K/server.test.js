@@ -64,9 +64,11 @@ test("five seats, authentication, private values, ready, locking and stale reque
   await g.submit([[2, 10], [3, 20], [4, 30], [5, 40]]);
   assert.equal(g.room.phase, "result");
   assert.equal(g.room.round, 1);
+  assert.equal(g.room.announcementUntil - (await g.request(1)).body.serverNow, 12000);
+  assert.equal((await g.request(1, "ready", { round: 1 })).status, 409);
   await g.ready();
   assert.equal(g.room.round, 2);
-  assert.equal(g.room.deadline, 1180000);
+  assert.equal(g.room.deadline - (await g.request(1)).body.serverNow, 180000);
   assert.equal((await g.request(1, "submit", { round: 1, value: 20 })).status, 409);
   assert.equal((await g.request(1, "ready", { round: 1 })).status, 409);
 });
@@ -206,12 +208,20 @@ test("solo demo is isolated and unlocks rules with a mandatory 12-second announc
     assert.equal(res.status, 200);
     const s = await res.json();
     assert.equal(s.result.eliminated.length, 1);
-    assert.equal(s.announcementUntil - s.serverNow, 12000);
-    assert.equal(s.newRules.length, round < 3 ? 1 : 0);
+    assert.equal(s.scoreAnnouncementUntil - s.serverNow, 12000);
+    assert.equal(s.announcementUntil - s.serverNow, round < 3 ? 24000 : 12000);
+    assert.equal(s.newRules.length, 0);
     assert.equal((await step(round + 1)).status, 409);
     if (round === 3) { assert.equal(s.me.eliminated, true); assert.equal(s.phase, 'finished'); }
     g.advance(12000);
+    const afterScore = await (await fetch(`${g.base}/api/rooms/${demo.code}`, { headers })).json();
+    assert.equal(afterScore.newRules.length, round < 3 ? 1 : 0);
+    if (round < 3) {
+      assert.equal((await step(round + 1)).status, 409);
+      g.advance(12000);
+    }
   }
   assert.equal((await g.request(1, 'demo_step', { round: 0 })).status, 409);
 });
+
 

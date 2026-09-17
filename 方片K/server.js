@@ -30,11 +30,12 @@ function createGameServer({ now = Date.now } = {}) {
     return room;
   }
   function state(room, me) {
+    const hideNewRules = room.result && now() < room.scoreAnnouncementUntil;
     const view = (p) => ({ ...identity(p), joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
-    return { code: room.code, demo: Boolean(room.demo), announcementUntil: room.announcementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
+    return { code: room.code, demo: Boolean(room.demo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
       activeCount: room.players.filter(p => !p.eliminated).length,
       me: me ? { ...view(me), value: me.value } : null, players: room.players.map(view),
-      visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, room.stage)], newRules: room.newRules,
+      visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, hideNewRules ? room.stage - room.newRules.length : room.stage)], newRules: hideNewRules ? [] : room.newRules,
       result: room.result, history: room.history };
   }
   function begin(room) {
@@ -79,7 +80,8 @@ function createGameServer({ now = Date.now } = {}) {
     room.phase = remaining.length <= 1 ? "finished" : "result";
     if (room.phase === "finished") room.newRules = [];
     const eliminated = active.filter(p => p.eliminated).map(p => ({ ...identity(p), score: p.score }));
-    room.announcementUntil = eliminated.length ? now() + 12000 : null;
+    room.scoreAnnouncementUntil = now() + 12000;
+    room.announcementUntil = room.scoreAnnouncementUntil + (room.newRules.length ? 12000 : 0);
     room.deadline = null;
     room.result = { round: room.round, average: average === null ? null : Number(average.toFixed(4)), target: target === null ? null : Number(target.toFixed(4)),
       values: active.map(p => ({ ...identity(p), value: p.value })), winners: winners.map(identity), duplicated,
@@ -165,7 +167,7 @@ function createGameServer({ now = Date.now } = {}) {
         } else {
           if (body.round !== room.round || me.eliminated) return sendJson(res, 409, { error: "轮次已变化或你已淘汰，请同步后重试。" });
           if (action === "ready") {
-            if (now() < room.announcementUntil) return sendJson(res, 409, { error: "请等待 12 秒规则播报结束。" });
+            if (now() < room.announcementUntil) return sendJson(res, 409, { error: "请等待记分和追加规则播报结束。" });
             if (!["lobby", "result"].includes(room.phase)) return sendJson(res, 409, { error: "当前不能准备" });
             me.ready = true;
             if (room.players.filter(p => !p.eliminated).every(p => p.token && p.ready)) begin(room);
@@ -221,5 +223,6 @@ if (require.main === module) {
   });
 }
 module.exports = { createGameServer };
+
 
 
