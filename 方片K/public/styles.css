@@ -250,3 +250,18 @@ button:disabled {
     padding-top: 18px;
   }
 }
+
+dialog {
+  width: min(560px, calc(100vw - 32px));
+  box-sizing: border-box;
+  border: 2px solid var(--gold);
+  padding: 28px;
+  background: var(--panel);
+  color: var(--text);
+  line-height: 1.8;
+}
+dialog::backdrop { background: rgba(0, 0, 0, .82); }
+#announcementTitle { color: var(--gold); }
+#announcementCountdown { color: var(--muted); margin-bottom: 0; }
+#eliminationPanel { border-color: var(--red); margin-bottom: 16px; }
+#demoPanel { margin-bottom: 16px; }

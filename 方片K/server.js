@@ -31,7 +31,7 @@ function createGameServer({ now = Date.now } = {}) {
   }
   function state(room, me) {
     const view = (p) => ({ ...identity(p), joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
-    return { code: room.code, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
+    return { code: room.code, demo: Boolean(room.demo), announcementUntil: room.announcementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
       activeCount: room.players.filter(p => !p.eliminated).length,
       me: me ? { ...view(me), value: me.value } : null, players: room.players.map(view),
       visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, room.stage)], newRules: room.newRules,
@@ -77,14 +77,18 @@ function createGameServer({ now = Date.now } = {}) {
     room.newRules = EXTRA_RULES.slice(room.stage, nextStage);
     room.stage = nextStage;
     room.phase = remaining.length <= 1 ? "finished" : "result";
+    if (room.phase === "finished") room.newRules = [];
+    const eliminated = active.filter(p => p.eliminated).map(p => ({ ...identity(p), score: p.score }));
+    room.announcementUntil = eliminated.length ? now() + 12000 : null;
     room.deadline = null;
     room.result = { round: room.round, average: average === null ? null : Number(average.toFixed(4)), target: target === null ? null : Number(target.toFixed(4)),
       values: active.map(p => ({ ...identity(p), value: p.value })), winners: winners.map(identity), duplicated,
-      penalty, exactHit, specialRule: Boolean(special), losses, finalWinner: remaining.length === 1 ? identity(remaining[0]) : null, allEliminated: remaining.length === 0 };
+      penalty, exactHit, specialRule: Boolean(special), losses, eliminated, finalWinner: remaining.length === 1 ? identity(remaining[0]) : null, allEliminated: remaining.length === 0 };
     room.history.unshift(`第 ${room.round} 轮：目标 ${room.result.target ?? "无"}，胜者 ${winners.map(p => p.name).join("、") || "无"}。`);
     room.history = room.history.slice(0, 12);
   }
   function releaseIdleSeats(room) {
+    if (room.demo) return;
     if (room.phase !== "lobby") return;
     for (const p of room.players) {
       if (p.token && now() - p.lastSeen >= 120000) {
@@ -98,12 +102,14 @@ function createGameServer({ now = Date.now } = {}) {
     try {
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return sendJson(res, 200, { ok: true });
-      if (req.method === "POST" && url.pathname === "/api/match") {
+      if (req.method === "POST" && ["/api/match", "/api/demo"].includes(url.pathname)) {
         const body = await readBody(req);
         const token = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!/^[a-f0-9]{48}$/.test(token)) return sendJson(res, 400, { error: "浏览器身份无效，请返回首页重新加入。" });
         if (typeof body.name !== "string" || !body.name.trim()) return sendJson(res, 400, { error: "请输入昵称" });
+        const demo = url.pathname === "/api/demo";
         for (const room of rooms.values()) {
+          if (Boolean(room.demo) !== demo) continue;
           releaseIdleSeats(room);
           settle(room);
           const me = room.players.find(p => p.token === token);
@@ -112,11 +118,16 @@ function createGameServer({ now = Date.now } = {}) {
             return sendJson(res, 200, state(room, me));
           }
         }
-        const room = [...rooms.values()].find(r => r.phase === "lobby" && r.players.some(p => !p.token)) || createRoom();
+        const room = (!demo && [...rooms.values()].find(r => !r.demo && r.phase === "lobby" && r.players.some(p => !p.token))) || createRoom();
+        room.demo = demo;
         const me = room.players.find(p => !p.token);
         me.token = token;
         me.name = body.name.trim().slice(0, 16);
         me.lastSeen = now();
+        if (demo) for (const p of room.players.slice(1)) {
+          p.token = crypto.randomBytes(24).toString("hex");
+          p.name = `模拟玩家 ${p.seat}`;
+        }
         return sendJson(res, 201, state(room, me));
       }
       const match = url.pathname.match(/^\/api\/rooms\/([A-F0-9]{6})(?:\/(\w+))?$/);
@@ -131,11 +142,22 @@ function createGameServer({ now = Date.now } = {}) {
         settle(room);
         const action = match[2];
         if (req.method === "GET" && !action) return sendJson(res, 200, state(room, me));
-        if (req.method !== "POST" || !["join", "ready", "submit"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
+        if (req.method !== "POST" || !["join", "ready", "submit", "demo_step"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
         const body = await readBody(req);
         // Recheck after awaiting the request body: the deadline or round may have changed.
         if (me.token !== token) return sendJson(res, 403, { error: "座位已失效，请返回首页重新加入。" });
         settle(room);
+        if (action === "demo_step") {
+          if (!room.demo || me.seat !== 1 || body.round !== room.round || !["lobby", "result"].includes(room.phase) || now() < room.announcementUntil) return sendJson(res, 409, { error: "当前不能推进演示，请等待播报结束。" });
+          begin(room);
+          const active = room.players.filter(p => !p.eliminated);
+          const victim = active.length === 2 ? me : active[active.length - 1];
+          victim.score = -9;
+          for (const p of active) { p.value = p === victim ? 100 : p.seat * 5; p.submitted = true; }
+          settle(room);
+          return sendJson(res, 200, state(room, me));
+        }
+        if (room.demo) return sendJson(res, 409, { error: "演示局请使用演示按钮。" });
         if (action === "join") {
           if (room.phase !== "lobby") return sendJson(res, 409, { error: "开始后不能改名" });
           if (typeof body.name !== "string" || !body.name.trim()) return sendJson(res, 400, { error: "请输入姓名" });
@@ -143,6 +165,7 @@ function createGameServer({ now = Date.now } = {}) {
         } else {
           if (body.round !== room.round || me.eliminated) return sendJson(res, 409, { error: "轮次已变化或你已淘汰，请同步后重试。" });
           if (action === "ready") {
+            if (now() < room.announcementUntil) return sendJson(res, 409, { error: "请等待 12 秒规则播报结束。" });
             if (!["lobby", "result"].includes(room.phase)) return sendJson(res, 409, { error: "当前不能准备" });
             me.ready = true;
             if (room.players.filter(p => !p.eliminated).every(p => p.token && p.ready)) begin(room);

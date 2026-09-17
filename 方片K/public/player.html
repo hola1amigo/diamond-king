@@ -9,7 +9,7 @@
 <body>
   <main class="app">
     <header><div><h1>方片 K</h1><p class="muted" id="roomInfo">连接中</p></div><div class="chip" id="roundChip">等待开始</div></header>
-    <section class="panel stack">
+    <section class="panel" id="demoPanel" hidden><h2>单人流程演示</h2><p>四名模拟玩家自动选数。每轮预设一人处于 −9 分，依次演示淘汰、规则解锁，最后演示你被淘汰。不是公平对战，也不影响真人房间。</p><button id="demoStepBtn">演示下一轮（自动选数）</button></section><section class="panel" id="eliminationPanel" hidden><h2 class="danger">你已淘汰</h2><p id="eliminationText"></p></section><section class="panel stack">
       <h2 id="nameTitle">座位</h2>
       <p id="timer" role="timer">等待同步</p>
       <div class="grid">
@@ -34,8 +34,10 @@
     </section>
     <section class="panel" style="margin-top:16px"><h3>历史记录</h3><div class="history" id="history"></div></section>
   </main>
+<dialog id="announcement" aria-labelledby="announcementTitle"><h2 id="announcementTitle">淘汰播报</h2><p id="announcementEliminated"></p><ol id="announcementRules"></ol><p id="announcementCountdown" role="timer"></p></dialog>
   <script src="/app.js"></script>
   <script src="/player.js"></script>
 </body>
 </html>
+
 

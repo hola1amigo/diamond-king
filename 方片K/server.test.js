@@ -29,6 +29,7 @@ async function setup(t) {
     return { status: response.status, body: await response.json() };
   }
   async function ready() {
+    if (room.announcementUntil > time) time = room.announcementUntil;
     const round = room.round;
     for (const p of room.players.filter(p => !p.eliminated)) assert.equal((await request(p.seat, "ready", { round })).status, 200);
   }
@@ -49,7 +50,7 @@ test("five seats, authentication, private values, ready, locking and stale reque
   for (let seat = 1; seat <= 4; seat++) await g.request(seat, "ready", { round: 0 });
   assert.equal(g.room.phase, "lobby");
   await g.request(5, "ready", { round: 0 });
-  assert.equal(g.room.deadline, 1300000);
+  assert.equal(g.room.deadline - (await g.request(1)).body.serverNow, 300000);
   for (const value of ["", null, true, "10", -1, 101, 1.001]) assert.equal((await g.request(1, "submit", { round: 1, value })).status, 400);
   await g.submit([[1, 12.34]]);
   const own = (await g.request(1)).body;
@@ -92,10 +93,11 @@ test("4/3/2 stages, long new-rule rounds, duplicates, exact hits and 0/100", asy
   await g.ready();
   g.room.players[4].score = -9;
   await g.submit([[1, 10], [2, 20], [3, 30], [4, 40], [5, 100]]);
+  assert.equal((await g.request(1, "ready", { round: g.room.round })).status, 409);
   assert.equal(g.room.stage, 1);
   assert.equal(g.room.newRules.length, 1);
   await g.ready();
-  assert.equal(g.room.deadline, 1300000);
+  assert.equal(g.room.deadline - (await g.request(1)).body.serverNow, 300000);
   g.room.players[3].score = -9;
   await g.submit([[1, 10], [2, 10], [3, 20], [4, 100]]);
   assert.deepEqual(g.room.result.duplicated, [10]);
@@ -188,3 +190,28 @@ test("waiting seats expire without affecting active games or another player's id
   assert.equal((await fetch(`${g.base}/health`)).status, 200);
   assert.equal((await fetch(`${g.base}/api/rooms`, { method: "POST" })).status, 404);
 });
+
+
+test("solo demo is isolated and unlocks rules with a mandatory 12-second announcement", async t => {
+  const g = await setup(t);
+  const headers = { 'content-type': 'application/json', Authorization: `Bearer ${g.tokens[0]}` };
+  const demo = await (await fetch(`${g.base}/api/demo`, { method: 'POST', headers, body: JSON.stringify({ name: '体验玩家' }) })).json();
+  assert.notEqual(demo.code, g.room.code);
+  assert.equal(demo.demo, true);
+  assert.equal(demo.newRules.length, 0);
+  assert.equal((await g.match(g.tokens[0])).body.code, g.room.code);
+  const step = round => fetch(`${g.base}/api/rooms/${demo.code}/demo_step`, { method: 'POST', headers, body: JSON.stringify({ round }) });
+  for (let round = 0; round < 4; round++) {
+    const res = await step(round);
+    assert.equal(res.status, 200);
+    const s = await res.json();
+    assert.equal(s.result.eliminated.length, 1);
+    assert.equal(s.announcementUntil - s.serverNow, 12000);
+    assert.equal(s.newRules.length, round < 3 ? 1 : 0);
+    assert.equal((await step(round + 1)).status, 409);
+    if (round === 3) { assert.equal(s.me.eliminated, true); assert.equal(s.phase, 'finished'); }
+    g.advance(12000);
+  }
+  assert.equal((await g.request(1, 'demo_step', { round: 0 })).status, 409);
+});
+

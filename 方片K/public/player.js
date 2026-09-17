@@ -7,6 +7,30 @@ const valueInput = document.querySelector("#valueInput");
 const saveNameBtn = document.querySelector("#saveNameBtn");
 const readyBtn = document.querySelector("#readyBtn");
 const submitBtn = document.querySelector("#submitBtn");
+const announcement = document.querySelector("#announcement");
+const demoStepBtn = document.querySelector("#demoStepBtn");
+let announcementKey = null;
+let announcementEnds = 0;
+announcement.addEventListener("cancel", event => event.preventDefault());
+function showAnnouncement(state) {
+  const eliminated = state.result?.eliminated || [];
+  const key = `${code}:${state.round}`;
+  if (!eliminated.length || key === announcementKey) return;
+  announcementKey = key;
+  const remaining = (state.announcementUntil || 0) - state.serverNow;
+  if (remaining <= 0) return;
+  setText("#announcementTitle", state.me.eliminated ? "你已淘汰" : state.newRules.length ? "追加规则公布" : "对局结束");
+  setText("#announcementEliminated", eliminated.map(p => `${p.name}：${p.score} 分，已淘汰`).join("；"));
+  renderRules(document.querySelector("#announcementRules"), state.newRules);
+  announcementEnds = performance.now() + remaining;
+  announcement.showModal();
+}
+setInterval(() => {
+  if (!announcement.open) return;
+  const seconds = Math.max(0, Math.ceil((announcementEnds - performance.now()) / 1000));
+  setText("#announcementCountdown", `${seconds} 秒后自动关闭；播报期间不会进入下一轮。`);
+  if (!seconds) { announcement.close(); controls(); }
+}, 200);
 let latest = null;
 let busy = false;
 let polling = false;
@@ -18,7 +42,7 @@ let syncedAt = 0;
 function countdown() {
   const el = document.querySelector("#timer");
   if (!latest || latest.phase !== "playing") {
-    el.textContent = latest?.phase === "finished" ? "游戏结束" : "等待全员准备";
+    el.textContent = latest?.phase === "finished" ? "游戏结束" : latest?.demo ? "演示模式 · 手动推进" : "等待全员准备";
     el.className = "";
     return;
   }
@@ -34,6 +58,13 @@ function controls() {
   readyBtn.disabled = busy || !connected || !me || me.eliminated || me.ready || !["lobby", "result"].includes(latest.phase);
   submitBtn.disabled = busy || !connected || !me || me.eliminated || me.submitted || latest.phase !== "playing";
   valueInput.disabled = submitBtn.disabled;
+  const announcing = announcement.open || (latest?.announcementUntil || 0) > (latest?.serverNow || 0) + performance.now() - syncedAt;
+  readyBtn.disabled ||= announcing || Boolean(latest?.demo);
+  saveNameBtn.disabled ||= Boolean(latest?.demo);
+  nameInput.disabled = saveNameBtn.disabled;
+  submitBtn.disabled ||= Boolean(latest?.demo);
+  valueInput.disabled = submitBtn.disabled;
+  demoStepBtn.disabled = busy || !connected || announcing || latest?.phase === "finished";
   countdown();
 }
 function render(state) {
@@ -42,6 +73,10 @@ function render(state) {
   remainingAtSync = state.deadline === null ? 0 : state.deadline - state.serverNow;
   syncedAt = performance.now();
   const me = state.me;
+  document.querySelector("#demoPanel").hidden = !state.demo;
+  document.querySelector("#eliminationPanel").hidden = !me.eliminated;
+  setText("#eliminationText", `最终得分 ${me.score} 分，已达到淘汰线。不能再选数或准备，可继续观看结果与剩余玩家对局。`);
+  showAnnouncement(state);
   setText("#roomInfo", `房间 ${code} / 座位 ${me.seat}`);
   setText("#roundChip", state.round ? `第 ${state.round} 轮` : "等待开始");
   setText("#nameTitle", `${me.name} / ${me.score} 分`);
@@ -51,7 +86,7 @@ function render(state) {
     : me.eliminated ? "你已淘汰，可以继续观看。"
     : state.phase === "playing" ? (me.submitted ? `已锁定数字 ${me.value}，等待结算。` : "请输入数字并确认提交。")
     : me.ready ? "已准备，等待其他存活玩家。" : "阅读规则和结果后，点击准备。";
-  setText("#myStatus", status);
+  setText("#myStatus", state.demo && state.phase !== "finished" ? "点击上方“演示下一轮”查看下一个淘汰场景。" : status);
   readyBtn.textContent = state.phase === "lobby" ? "准备开始" : state.newRules.length ? "已读规则，准备下一轮" : "准备下一轮";
   document.querySelector("#newRulesPanel").hidden = !state.newRules.length || state.phase === "finished";
   renderRules(document.querySelector("#newRules"), state.newRules);
@@ -82,6 +117,7 @@ async function act(action, data) {
     try { await refresh(); } catch { connected = false; }
   } finally { busy = false; controls(); }
 }
+demoStepBtn.addEventListener("click", () => act("demo_step", {}));
 saveNameBtn.addEventListener("click", () => act("join", { name: nameInput.value }));
 readyBtn.addEventListener("click", () => act("ready", {}));
 submitBtn.addEventListener("click", () => {
@@ -107,5 +143,7 @@ async function poll() {
 if (!code || !token) setText("#error", "请返回首页，输入昵称加入游戏。");
 else poll();
 setInterval(countdown, 200);
+
+
 
 
