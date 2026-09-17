@@ -29,6 +29,16 @@ body {
   color: var(--text);
   line-height: 1.65;
   border-top: 3px solid #612b2b;
+  isolation: isolate;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(#000d, #000e), url("/background.png") center / cover no-repeat;
 }
 
 button,
