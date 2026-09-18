@@ -13,7 +13,7 @@ const BASE_RULES = [
 ];
 const EXTRA_RULES = [
   "相同数字无效，不能获胜，但仍计入平均数。",
-  "有人精确命中目标值时，其他已提交的失败者扣 2 分。",
+  "胜负仍按原始目标值比较距离；获胜者选数等于目标值四舍五入后的整数，视为精确命中，其他已提交的失败者扣 2 分。",
   "两人对决时，若一方选 0、另一方选 100，100 获胜。"
 ];
 const stageFor = (count) => Math.min(3, 5 - count);
@@ -64,7 +64,7 @@ function createGameServer({ now = Date.now } = {}) {
     const distance = p => Math.abs(Math.round(p.value * 100) * 5 * n - sum * 4);
     const closest = Math.min(...valid.map(distance));
     const winners = special ? [special] : valid.filter(p => distance(p) === closest);
-    const exactHit = room.stage >= 2 && winners.some(p => distance(p) === 0);
+    const exactHit = room.stage >= 2 && winners.some(p => p.value === Math.round(target));
     const penalty = exactHit ? 2 : 1;
     const losses = active.map(p => {
       const deduction = !p.submitted ? 1 : winners.includes(p) ? 0 : penalty;

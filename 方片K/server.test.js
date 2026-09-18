@@ -121,6 +121,30 @@ test("4/3/2 stages, long new-rule rounds, duplicates, exact hits and 0/100", asy
   assert.equal((await g.request(2, "ready", { round: g.room.round })).status, 409);
 });
 
+test("rounded exact hit changes penalty but preserves raw-target winners and timeout penalty", async t => {
+  const g = await setup(t);
+  g.room.players[3].eliminated = true;
+  g.room.players[4].eliminated = true;
+  g.room.stage = 2;
+  await g.ready();
+  await g.submit([[1, 20], [2, 21], [3, 37]]);
+  assert.equal(g.room.result.target, 20.8);
+  assert.deepEqual(g.room.result.winners.map(p => p.seat), [2]);
+  assert.equal(g.room.result.exactHit, true);
+  assert.deepEqual(g.room.result.losses.map(p => p.deduction), [2, 0, 2]);
+  await g.ready();
+  await g.submit([[1, 20], [2, 25], [3, 34]]);
+  assert.equal(g.room.result.exactHit, false);
+  assert.equal(g.room.result.penalty, 1);
+  await g.ready();
+  await g.submit([[1, 21], [2, 31]]);
+  g.advance(300000);
+  await g.request(1);
+  assert.equal(g.room.result.target, 20.8);
+  assert.equal(g.room.result.exactHit, true);
+  assert.deepEqual(g.room.result.losses.map(p => p.deduction), [0, 2, 1]);
+});
+
 test("simultaneous elimination unlocks crossed stages; zero survivors terminates", async t => {
   const g = await setup(t);
   await g.ready();
