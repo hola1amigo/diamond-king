@@ -51,11 +51,11 @@ test("five seats, authentication, private values, ready, locking and stale reque
   assert.equal(g.room.phase, "lobby");
   await g.request(5, "ready", { round: 0 });
   assert.equal(g.room.deadline - (await g.request(1)).body.serverNow, 300000);
-  for (const value of ["", null, true, "10", -1, 101, 1.001]) assert.equal((await g.request(1, "submit", { round: 1, value })).status, 400);
-  await g.submit([[1, 12.34]]);
+  for (const value of ["", null, true, "10", -1, 101, 1.001, 12.34, 20.5]) assert.equal((await g.request(1, "submit", { round: 1, value })).status, 400);
+  await g.submit([[1, 12]]);
   const own = (await g.request(1)).body;
   const other = (await g.request(2)).body;
-  assert.equal(own.me.value, 12.34);
+  assert.equal(own.me.value, 12);
   assert.equal(other.me.value, null);
   assert.equal(other.result, null);
   assert.ok(other.players.every(p => !("value" in p) && !("token" in p)));

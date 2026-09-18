@@ -14,7 +14,7 @@
       <p id="timer" role="timer">等待同步</p>
       <div class="grid">
         <div><label for="nameInput">姓名（开局前可修改）</label><input id="nameInput" maxlength="16"></div>
-        <div><label for="valueInput">本轮数字（0～100，最多两位小数）</label><input id="valueInput" type="number" min="0" max="100" step="0.01" disabled></div>
+        <div><label for="valueInput">本轮数字（0～100 的整数）</label><input id="valueInput" type="number" min="0" max="100" step="1" inputmode="numeric" disabled></div>
       </div>
       <div class="actions">
         <button id="saveNameBtn" disabled>保存姓名</button>

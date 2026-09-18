@@ -148,7 +148,7 @@ demoStepBtn.addEventListener("click", () => act("demo_step", {}));
 saveNameBtn.addEventListener("click", () => act("join", { name: nameInput.value }));
 readyBtn.addEventListener("click", () => act("ready", {}));
 submitBtn.addEventListener("click", () => {
-  if (!valueInput.value.trim() || !valueInput.checkValidity()) return setText("#error", "请输入 0～100，最多两位小数。");
+  if (!valueInput.value.trim() || !valueInput.checkValidity() || !Number.isInteger(Number(valueInput.value))) return setText("#error", "请输入 0～100 的整数。");
   act("submit", { value: Number(valueInput.value) });
 });
 async function poll() {

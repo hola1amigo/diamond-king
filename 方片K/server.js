@@ -6,7 +6,7 @@ const fs = require("fs");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_RULES = [
-  "选择 0～100 的数字（最多两位小数）。已提交数字的平均数 × 0.8 为目标值，最接近者获胜，其余提交者扣 1 分；同距离并列获胜。",
+  "选择 0～100 的整数。已提交数字的平均数 × 0.8 为目标值，最接近者获胜，其余提交者扣 1 分；同距离并列获胜。",
   "达到 −10 分淘汰，最后一人获胜。每淘汰一人追加规则，已有规则持续有效。",
   "首轮及追加规则后的轮次限时 5 分钟，普通轮 3 分钟。提交后锁定，全员提交立即结算。",
   "网络版：超时未提交者扣 1 分，不计入平均数；全员超时则全员扣 1 分。"
@@ -174,7 +174,7 @@ function createGameServer({ now = Date.now } = {}) {
           } else {
             if (room.phase !== "playing" || me.submitted) return sendJson(res, 409, { error: "本轮已截止或已提交，不能修改。" });
             const value = body.value;
-            if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100 || Math.abs(value * 100 - Math.round(value * 100)) > 1e-8) return sendJson(res, 400, { error: "请输入 0～100，最多两位小数。" });
+            if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) return sendJson(res, 400, { error: "请输入 0～100 的整数。" });
             me.value = value;
             me.submitted = true;
             settle(room);
