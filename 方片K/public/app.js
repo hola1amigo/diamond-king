@@ -27,17 +27,42 @@ function renderRules(el, rules) {
   el.innerHTML = rules.map((rule) => `<li>${escapeHtml(rule)}</li>`).join("");
 }
 
-function renderPlayers(el, players, phase) {
+function animateSettlement(el) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  el.querySelectorAll(".round-winner").forEach(node => node.animate([
+    { borderColor: "#fff", boxShadow: "0 0 12px #fff5" },
+    { borderColor: "#777", boxShadow: "0 0 0 #fff0" },
+    { borderColor: "#fff", boxShadow: "0 0 12px #fff5" }
+  ], { duration: 1200, iterations: 3 }));
+  el.querySelectorAll(".score-change").forEach(node => node.animate([
+    { transform: "translateY(-8px)", opacity: 0 },
+    { transform: "translateY(0)", opacity: 1 }
+  ], { duration: 700, easing: "ease-out" }));
+}
+
+function settlementTarget(result) {
+  return `<div class="settlement-target"><span>结算目标值</span><strong>${result.target ?? "无"}</strong><small>平均数 ${result.average ?? "无"} × 0.8</small></div>`;
+}
+
+function renderPlayers(el, players, phase, result) {
+  const view = JSON.stringify([players, phase, result]);
+  if (el.dataset.view === view) return;
+  el.dataset.view = view;
   el.innerHTML = players.map((player) => `
-    <article class="player ${!player.joined ? "等待玩家加入" : player.eliminated ? "eliminated" : ""}">
+    <article class="player ${player.eliminated ? "eliminated" : ""} ${result?.winners.some(p => p.seat === player.seat) ? "round-winner" : ""}">
       <div class="row">
         <strong>${escapeHtml(player.name)}</strong>
-        <span class="score">${player.score} 分</span>
+        <span class="score ${result?.losses.some(p => p.seat === player.seat && p.deduction) ? "score-change" : ""}">${player.score} 分</span>
       </div>
       <p class="muted">座位 ${player.seat}</p>
+      ${result?.winners.some(p => p.seat === player.seat) ? '<p class="winner-label">本轮获胜</p>' : ''}
       <p>${!player.joined ? "等待玩家加入" : player.eliminated ? '<span class="danger">已淘汰</span>' : phase === 'playing' ? (player.submitted ? '<span class="ok">已提交</span>' : '等待提交') : (player.ready ? '已准备' : '未准备')}</p>
     </article>
   `).join("");
+  if (result && el.dataset.animatedRound !== String(result.round)) {
+    el.dataset.animatedRound = String(result.round);
+    animateSettlement(el);
+  }
 }
 
 function renderResult(el, result) {
@@ -65,7 +90,7 @@ function renderResult(el, result) {
 
   el.innerHTML = `
     <p><strong>第 ${result.round} 轮</strong></p>
-    <p>平均数：${result.average ?? "无"}，目标值：${result.target ?? "无"}</p>
+    ${settlementTarget(result)}
     <p>输入：${values}</p>
     ${winnerLine}
     <p class="blue">${escapeHtml(extra)}</p>

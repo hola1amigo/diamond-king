@@ -332,4 +332,16 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
 #announcementEliminated:not(:empty) { background: #55171755; border-left: 3px solid var(--red); padding: 10px 14px; }
 #eliminationPanel { border-color: var(--red); margin-bottom: 16px; }
 #demoPanel { margin-bottom: 16px; }
+.settlement-target { text-align: center; background: #000; border: 1px solid var(--line); padding: 12px; margin-bottom: 16px; }
+.settlement-target > span { font-size: 14px; color: var(--text); }
+.settlement-target strong { display: block; font-size: clamp(36px, 8vw, 52px); line-height: 1.3; color: #fff; font-variant-numeric: tabular-nums; }
+.settlement-target small { display: block; color: var(--muted); font-size: 12px; }
+.settlement-players { display: grid; gap: 8px; margin-bottom: 16px; }
+.settlement-player { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 14px; }
+.settlement-player > :first-child { min-width: 0; }
+.settlement-points { text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.round-winner { border-color: #fff; }
+.winner-label { display: inline-block; color: #fff; font-size: 12px; margin-left: 8px; }
+.player .winner-label { margin: 0; }
+.score-change { display: inline-block; color: var(--red); }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }

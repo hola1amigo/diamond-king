@@ -39,15 +39,20 @@ function showAnnouncement(state) {
       const r = state.result;
       const label = p => `${p.seat} 号 ${escapeHtml(p.name)}`;
       const winners = r.winners.map(label).join("、");
-      score.innerHTML = `<p>${r.values.map(p => `${label(p)}：${p.value === null ? "超时未提交" : `选择 ${p.value}`}`).join("<br>")}</p>
-        <p>平均数：${r.average ?? "无"}<br>目标值（平均数 × 0.8）：${r.target ?? "无"}</p>
+      score.innerHTML = `${settlementTarget(r)}
         <p class="ok">${winners ? `${winners}${r.specialRule ? "触发 0／100 特例" : "最接近目标值"}，本轮获胜。` : "本轮无人获胜。"}</p>
+        <div class="settlement-players">${r.values.map(p => {
+          const deduction = r.losses.find(loss => loss.seat === p.seat)?.deduction || 0;
+          const total = state.players.find(player => player.seat === p.seat).score;
+          const won = r.winners.some(winner => winner.seat === p.seat);
+          return `<div class="settlement-player ${won ? "round-winner" : ""}"><div><strong>${label(p)}</strong>${won ? '<span class="winner-label">本轮获胜</span>' : ''}<br><span class="muted">${p.value === null ? "超时未提交" : `选择 ${p.value}`}</span></div><div class="settlement-points"><span class="${deduction ? "danger" : "muted"}">扣 ${deduction} 分</span><br><span class="muted">${total + deduction} → </span><strong class="${deduction ? "score-change" : ""}">${total} 分</strong></div></div>`;
+        }).join("")}</div>
         ${r.duplicated.length ? `<p>重复失效数字：${r.duplicated.join("、")}</p>` : ""}
-        <p>${r.losses.map(p => `${label(p)}：扣 ${p.deduction} 分，累计 ${state.players.find(player => player.seat === p.seat).score} 分`).join("<br>")}</p>
         ${r.finalWinner ? `<p class="ok">${label(r.finalWinner)} 获得最终胜利。</p>` : r.allEliminated ? "<p>全员淘汰，本局无最终胜者。</p>" : ""}`;
     }
     renderRules(document.querySelector("#announcementRules"), scoring || victory ? [] : state.newRules);
     if (!announcement.open) announcement.showModal();
+    if (scoring) animateSettlement(score);
   }
   const seconds = Math.max(0, Math.ceil(((scoring ? state.scoreAnnouncementUntil : state.announcementUntil) - serverTime) / 1000));
   setText("#announcementCountdown", `${seconds} 秒后${scoring && state.announcementUntil > state.scoreAnnouncementUntil ? state.result.finalWinner ? "播报最终胜利" : "播报追加规则" : "关闭"}${state.phase === "finished" ? "。" : "；播报期间不会进入下一轮。"}`);
@@ -113,7 +118,7 @@ function render(state) {
   document.querySelector("#newRulesPanel").hidden = !state.newRules.length || state.phase === "finished";
   renderRules(document.querySelector("#newRules"), state.newRules);
   renderRules(document.querySelector("#rules"), state.visibleRules);
-  renderPlayers(document.querySelector("#players"), state.players, state.phase);
+  renderPlayers(document.querySelector("#players"), state.players, state.phase, state.result);
   renderResult(document.querySelector("#result"), state.result);
   renderHistory(document.querySelector("#history"), state.history);
   controls();
