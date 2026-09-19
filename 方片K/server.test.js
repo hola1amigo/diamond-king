@@ -443,3 +443,43 @@ test("reasoning levels produce distinct opening responses to the same evidence",
   });
   assert.ok(means[0]>means[1]+3 && means[1]>means[2]+3,JSON.stringify(means));
 });
+test("two unanimous rounds unlock only duplicate rule, after settlement and permanently",async t=>{
+  const g=await setup(t);
+  for(const value of [1,0]){
+    await g.ready();await g.submit([1,2,3,4,5].map(seat=>[seat,value]));
+    assert.ok(g.room.players.every(p=>p.score===0));
+  }
+  assert.equal(g.room.stage,1);
+  let s=(await g.request(1)).body;
+  assert.deepEqual(s.newRules,[]);assert.equal(s.earlyRuleUnlock,false);
+  g.advance(12000);s=(await g.request(1)).body;
+  assert.equal(s.newRules.length,1);assert.equal(s.earlyRuleUnlock,true);
+  assert.equal(s.visibleRules.length,5);
+  await g.ready();assert.equal(g.room.deadline-(await g.request(1)).body.serverNow,300000);
+  await g.submit([[1,0],[2,0],[3,0],[4,0],[5,1]]);
+  assert.deepEqual(g.room.result.winners.map(p=>p.seat),[5]);
+  assert.equal(g.room.result.exactHit,false);
+  assert.equal(g.room.stage,1);assert.equal(g.room.newRules.length,0);
+  g.room.players[0].score=-9;
+  await g.ready();await g.submit([[1,100],[2,5],[3,10],[4,15],[5,20]]);
+  assert.equal(g.room.players.filter(p=>!p.eliminated).length,4);
+  assert.equal(g.room.stage,1);assert.equal(g.room.newRules.length,0);
+  g.room.players[1].score=-9;
+  await g.ready();await g.submit([[2,100],[3,5],[4,10],[5,15]]);
+  assert.equal(g.room.stage,2);assert.equal(g.room.newRules.length,1);
+  g.room.players[2].score=-9;
+  await g.ready();await g.submit([[3,100],[4,5],[5,10]]);
+  assert.equal(g.room.stage,3);assert.equal(g.room.newRules.length,1);
+});
+test("nonidentical choices and timeouts break the unanimous streak",async t=>{
+  const g=await setup(t);
+  const all=()=>g.submit([1,2,3,4,5].map(seat=>[seat,1]));
+  await g.ready();await all();
+  await g.ready();await g.submit([[1,1],[2,1],[3,1],[4,1],[5,2]]);
+  await g.ready();await all();assert.equal(g.room.stage,0);
+  await g.ready();await g.submit([[1,1],[2,1],[3,1],[4,1]]);
+  g.advance(300000);await g.request(1);
+  assert.equal(g.room.unanimousRounds,0);
+  await g.ready();await all();assert.equal(g.room.stage,0);
+  await g.ready();await all();assert.equal(g.room.stage,1);
+});

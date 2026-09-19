@@ -30,7 +30,7 @@ function showAnnouncement(state) {
     announcement.scrollTop = 0;
     document.querySelector("#announcementClose").hidden = scoring || victory;
     document.querySelector("#announcementCountdown").hidden = victory;
-    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束" : "追加规则公布");
+    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束" : state.earlyRuleUnlock ? "追加规则 1 · 提前解锁" : "追加规则公布");
     const eliminated = state.result.eliminated || [];
     setText("#announcementEliminated", scoring && eliminated.length ? `本轮淘汰：${eliminated.map(p => `${p.seat} 号 ${p.name}（${p.score} 分）`).join("、")}` : "");
     const score = document.querySelector("#announcementScore");

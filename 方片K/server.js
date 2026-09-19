@@ -9,7 +9,7 @@ const { BOT_PROFILES, chooseBotNumber } = require("./bots");
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_RULES = [
   "选择 0～100 的整数。已提交数字的平均数 × 0.8 为目标值，最接近者获胜，其余提交者扣 1 分；同距离并列获胜。",
-  "达到 −10 分淘汰，最后一人获胜。每淘汰一人追加规则，已有规则持续有效。",
+  "达到 −10 分淘汰，最后一人获胜。规则随淘汰追加；首次淘汰前，连续两轮全员提交相同数字会提前解锁规则 1。已有规则持续有效。",
   "首轮及追加规则后的轮次限时 5 分钟，普通轮 3 分钟。提交后锁定，全员提交立即结算。",
   "网络版：超时未提交者扣 1 分，不计入平均数；全员超时则全员扣 1 分。"
 ];
@@ -35,7 +35,7 @@ function createGameServer({ now = Date.now } = {}) {
     const hideNewRules = room.result && now() < room.scoreAnnouncementUntil;
     const view = (p) => ({ ...identity(p), bot: p.bot === undefined ? null : BOT_PROFILES[p.bot].style, joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
     return { code: room.code, friend: Boolean(room.friend), isHost: Boolean(me && room.hostToken === me.token), rosterVersion: room.rosterVersion || 0, botProfiles: room.friend ? BOT_PROFILES.map((p,id)=>({id,name:p.name,style:p.style})) : [], demo: Boolean(room.demo), solo: Boolean(room.solo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
-      activeCount: room.players.filter(p => !p.eliminated).length,
+      activeCount: room.players.filter(p => !p.eliminated).length, earlyRuleUnlock: !hideNewRules && Boolean(room.earlyRuleUnlock),
       me: me ? { ...view(me), value: me.value, rulesDismissed: me.rulesReadRound === room.round } : null, players: room.players.map(view),
       visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, hideNewRules ? room.stage - room.newRules.length : room.stage)], newRules: hideNewRules ? [] : room.newRules,
       result: room.result, history: room.history };
@@ -46,6 +46,7 @@ function createGameServer({ now = Date.now } = {}) {
     room.phase = "playing";
     room.result = null;
     room.newRules = [];
+    room.earlyRuleUnlock = false;
     for (const p of room.players) { p.ready = false; p.submitted = false; p.value = null; }
     if (room.solo || room.friend) {
       const players = room.players.filter(p => !p.eliminated).map(p => ({ seat: p.seat, score: p.score }));
@@ -69,7 +70,10 @@ function createGameServer({ now = Date.now } = {}) {
       return { ...identity(p), deduction, timedOut: !p.submitted };
     });
     const remaining = active.filter(p => !p.eliminated);
-    const nextStage = stageFor(remaining.length);
+    const unanimous = active.every(p => p.submitted && p.value === active[0].value);
+    room.unanimousRounds = room.stage === 0 && unanimous ? (room.unanimousRounds || 0) + 1 : 0;
+    room.earlyRuleUnlock = room.stage === 0 && remaining.length === 5 && room.unanimousRounds >= 2;
+    const nextStage = Math.max(room.stage, stageFor(remaining.length), room.earlyRuleUnlock ? 1 : 0);
     room.newRules = EXTRA_RULES.slice(room.stage, nextStage);
     room.stage = nextStage;
     room.phase = remaining.length <= 1 ? "finished" : "result";
