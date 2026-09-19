@@ -86,6 +86,7 @@ function countdown() {
 }
 function controls() {
   const me = latest?.me;
+  document.querySelector("#saveBotsBtn").disabled = busy || !connected || !latest?.isHost || latest?.phase !== "lobby";
   saveNameBtn.disabled = busy || !connected || latest?.phase !== "lobby";
   nameInput.disabled = saveNameBtn.disabled;
   readyBtn.disabled = busy || !connected || !me || me.eliminated || me.ready || !["lobby", "result"].includes(latest.phase);
@@ -107,12 +108,28 @@ function render(state) {
   syncedAt = performance.now();
   const me = state.me;
   document.querySelector("#demoPanel").hidden = !state.demo;
+
   document.querySelector("#soloPanel").hidden = !state.solo;
+  document.querySelector("#friendPanel").hidden = !state.friend;
+  if (state.friend) {
+    setText("#friendRoomCode",state.code);
+    const editable=state.isHost && state.phase==="lobby";
+    document.querySelector("#friendHost").hidden=!editable;
+    const botBox=document.querySelector("#friendBots");
+    if (editable && botBox.dataset.version!==String(state.rosterVersion)) {
+      botBox.dataset.version=String(state.rosterVersion);
+      botBox.innerHTML=state.botProfiles.map(p=>`<label><input type="checkbox" value="${p.id}" ${state.players.some(player=>player.bot===p.style)?"checked":""}> ${escapeHtml(p.name)} · ${escapeHtml(p.style)}</label>`).join("");
+    }
+    const bots=state.players.filter(p=>p.bot).length, humans=state.players.filter(p=>p.joined&&!p.bot).length;
+    setText("#friendRoster",`当前：${humans} 名真人 + ${bots} 名机器人；${5-humans-bots} 个空位。${state.phase==="lobby"?"阵容变化后需重新准备。":"本局阵容已固定。"}`);
+    document.querySelector("#saveBotsBtn").disabled=busy || !connected || !editable;
+    setText("#connectionHint","好友房通过房间码加入。对局中离线不会暂停；同一浏览器输入原房间码可恢复座位。服务器重启后房间消失。");
+  }
   if (state.solo) setText("#connectionHint", "对局中离线不会暂停计时。同一浏览器再次选择单人挑战可恢复未结束的对局；服务器重启后无法恢复。");
   document.querySelector("#eliminationPanel").hidden = !me.eliminated;
   setText("#eliminationText", `最终得分 ${me.score} 分，已达到淘汰线。不能再选数或准备，可继续观看结果与剩余玩家对局。`);
   showAnnouncement(state);
-  setText("#roomInfo", `${state.solo ? "单人挑战 / " : ""}房间 ${code} / 座位 ${me.seat}`);
+  setText("#roomInfo", `${state.friend ? "好友房 / " : state.solo ? "单人挑战 / " : ""}房间 ${code} / 座位 ${me.seat}`);
   setText("#roundChip", state.round ? `第 ${state.round} 轮` : "等待开始");
   setText("#nameTitle", `${me.name} / ${me.score} 分`);
   if (document.activeElement !== nameInput) nameInput.value = me.name;
@@ -144,7 +161,7 @@ async function act(action, data) {
   controls();
   setText("#error", "");
   try {
-    const state = await api.post(`/api/rooms/${code}/${action}`, { ...data, round: latest.round });
+    const state = await api.post(`/api/rooms/${code}/${action}`, { ...data, round: latest.round, rosterVersion: latest.rosterVersion });
     connected = true;
     render(state);
   } catch (error) {
@@ -152,6 +169,7 @@ async function act(action, data) {
     try { await refresh(); } catch { connected = false; }
   } finally { busy = false; controls(); }
 }
+document.querySelector("#saveBotsBtn").addEventListener("click",()=>act("configure_bots",{profiles:[...document.querySelectorAll("#friendBots input:checked")].map(input=>Number(input.value))}));
 document.querySelector("#announcementClose").addEventListener("click", () => act("dismiss_rules", {}));
 demoStepBtn.addEventListener("click", () => act("demo_step", {}));
 saveNameBtn.addEventListener("click", () => act("join", { name: nameInput.value }));

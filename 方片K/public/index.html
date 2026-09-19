@@ -27,6 +27,7 @@
           <div class="entry-input-row"><input id="nickname" maxlength="16" required autocomplete="nickname" placeholder="以什么名字入局？"><button class="primary" id="joinBtn" type="submit">加入游戏 <span aria-hidden="true">↗</span></button></div>
           <p class="entry-hint">自动分配房间 · 五人全部准备后开始</p>
           <button id="soloBtn" type="submit" formnovalidate>单人挑战 · 对战四位机器人 <span aria-hidden="true">→</span></button>
+          <details class="friend-entry"><summary>好友房 · 自选机器人数量</summary><button id="createFriendBtn" type="submit">创建好友房</button><label for="friendCode">已有房间码</label><div class="entry-input-row"><input id="friendCode" maxlength="6" placeholder="输入 6 位房间码" autocomplete="off"><button id="joinFriendBtn" type="submit">加入好友房</button></div></details>
           <button id="demoBtn" type="submit" formnovalidate>只看流程演示（预设淘汰）</button>
         </form>
         <p id="status" aria-live="polite"></p>

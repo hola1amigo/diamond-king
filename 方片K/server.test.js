@@ -371,3 +371,75 @@ test("bots resist isolated spikes, recognise alternating choices and avoid inval
     assert.equal(choose(history(Array(8).fill(0),true),players.slice(0,4),1),1,"avoid repeated zero after duplicate rule unlocks");
   }
 });
+test("friend room supports two humans and three selected bots with locked private roster", async t=>{
+  const g=await setup(t);
+  const call=async (who,path,body)=>{
+    const r=await fetch(g.base+path,{method:body?"POST":"GET",headers:{"content-type":"application/json",Authorization:"Bearer "+g.tokens[who]},body:body?JSON.stringify(body):undefined});
+    return {status:r.status,body:await r.json()};
+  };
+  let s=(await call(0,"/api/friends/create",{name:"房主"})).body;
+  const path="/api/rooms/"+s.code, room=g.rooms.get(s.code);
+  assert.equal(s.friend,true);
+  assert.equal((await call(0,"/api/friends/create",{name:"房主"})).body.code,s.code);
+  assert.notEqual((await g.match(g.tokens[0])).body.code,s.code);
+  s=(await call(0,path+"/configure_bots",{profiles:[0,2,3]})).body;
+  assert.equal(s.players.filter(p=>p.bot).length,3);
+  assert.equal((await call(0,path+"/configure_bots",{profiles:[0,0]})).status,400);
+  const oldVersion=s.rosterVersion;
+  s=(await call(1,"/api/friends/join",{name:"朋友",code:s.code.toLowerCase()})).body;
+  assert.equal(s.isHost,false);
+  assert.equal(s.players.filter(p=>p.joined).length,5);
+  assert.equal((await call(1,path+"/configure_bots",{profiles:[]})).status,403);
+  assert.equal((await call(0,path+"/configure_bots",{profiles:[0,1,2,3]})).status,409);
+  assert.equal((await call(2,"/api/friends/join",{name:"多余",code:s.code})).status,409);
+  assert.equal((await call(0,path+"/ready",{round:0,rosterVersion:oldVersion})).status,409);
+  s=(await call(0,path+"/ready",{round:0,rosterVersion:s.rosterVersion})).body;
+  assert.equal(s.phase,"lobby");
+  s=(await call(1,path+"/ready",{round:0,rosterVersion:s.rosterVersion})).body;
+  assert.equal(s.phase,"playing");
+  assert.equal((await call(0,path+"/configure_bots",{profiles:[]})).status,409);
+  assert.equal((await call(2,"/api/friends/join",{name:"晚到",code:s.code})).status,409);
+  assert.equal((await call(1,"/api/friends/join",{name:"朋友",code:s.code})).body.me.seat,s.me.seat);
+  const plans=room.players.filter(p=>p.bot!==undefined).map(p=>p.plan.value);
+  assert.ok(s.players.every(p=>!("plan" in p)&&!("token" in p)&&!("value" in p)));
+  await call(0,path+"/submit",{round:1,value:25});
+  await call(1,path+"/submit",{round:1,value:50});
+  assert.deepEqual(room.players.filter(p=>p.bot!==undefined).map(p=>p.plan.value),plans);
+  g.advance(7000); s=(await call(0,path)).body;
+  assert.equal(s.phase,"result");assert.equal(s.result.values.length,5);
+  g.advance(24000);
+  s=(await call(0,path)).body;
+  s=(await call(0,path+"/ready",{round:1,rosterVersion:s.rosterVersion})).body;
+  assert.equal(s.phase,"result","one surviving human cannot start for the other");
+  s=(await call(1,path+"/ready",{round:1,rosterVersion:s.rosterVersion})).body;
+  assert.equal(s.phase,"playing");
+});
+test("friend host can choose zero through four bots without silently replacing humans",async t=>{
+  const g=await setup(t);
+  const headers={"content-type":"application/json",Authorization:"Bearer "+g.tokens[0]};
+  const post=async(path,body)=>{const r=await fetch(g.base+path,{method:"POST",headers,body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+  const s=(await post("/api/friends/create",{name:"房主"})).body;
+  const path="/api/rooms/"+s.code;
+  for(let count=0;count<=4;count++){
+    const r=await post(path+"/configure_bots",{profiles:Array.from({length:count},(_,i)=>i)});
+    assert.equal(r.status,200);
+    assert.equal(r.body.players.filter(p=>p.bot).length,count);
+    assert.equal(r.body.players[0].name,"房主");
+    assert.equal(r.body.me.ready,false);
+  }
+  const room=g.rooms.get(s.code);
+  assert.equal((await post(path+"/ready",{round:0,rosterVersion:room.rosterVersion})).body.phase,"playing");
+});
+test("reasoning levels produce distinct opening responses to the same evidence",()=>{
+  const players=[1,2,3,4,5].map(seat=>({seat,score:0}));
+  const means=[0,1,2].map(profile=>{
+    let total=0;
+    for(let seed=1;seed<=8;seed++){
+      let value=seed;
+      const random=()=>((value=(Math.imul(value,1664525)+1013904223)>>>0)/4294967296);
+      total+=chooseBotNumber({seat:2,profile,players,history:[],stage:0},random);
+    }
+    return total/8;
+  });
+  assert.ok(means[0]>means[1]+3 && means[1]>means[2]+3,JSON.stringify(means));
+});

@@ -34,7 +34,7 @@ function createGameServer({ now = Date.now } = {}) {
   function state(room, me) {
     const hideNewRules = room.result && now() < room.scoreAnnouncementUntil;
     const view = (p) => ({ ...identity(p), bot: p.bot === undefined ? null : BOT_PROFILES[p.bot].style, joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
-    return { code: room.code, demo: Boolean(room.demo), solo: Boolean(room.solo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
+    return { code: room.code, friend: Boolean(room.friend), isHost: Boolean(me && room.hostToken === me.token), rosterVersion: room.rosterVersion || 0, botProfiles: room.friend ? BOT_PROFILES.map((p,id)=>({id,name:p.name,style:p.style})) : [], demo: Boolean(room.demo), solo: Boolean(room.solo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
       activeCount: room.players.filter(p => !p.eliminated).length,
       me: me ? { ...view(me), value: me.value, rulesDismissed: me.rulesReadRound === room.round } : null, players: room.players.map(view),
       visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, hideNewRules ? room.stage - room.newRules.length : room.stage)], newRules: hideNewRules ? [] : room.newRules,
@@ -47,7 +47,7 @@ function createGameServer({ now = Date.now } = {}) {
     room.result = null;
     room.newRules = [];
     for (const p of room.players) { p.ready = false; p.submitted = false; p.value = null; }
-    if (room.solo) {
+    if (room.solo || room.friend) {
       const players = room.players.filter(p => !p.eliminated).map(p => ({ seat: p.seat, score: p.score }));
       for (const p of room.players.filter(p => p.bot !== undefined && !p.eliminated)) {
         p.plan = { value: chooseBotNumber({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage }), submitAt: now() + crypto.randomInt(2000, 6001) };
@@ -81,7 +81,7 @@ function createGameServer({ now = Date.now } = {}) {
     room.result = { round: room.round, average: average === null ? null : Number(average.toFixed(4)), target: target === null ? null : Number(target.toFixed(4)),
       values: active.map(p => ({ ...identity(p), value: p.value })), winners: winners.map(identity), duplicated,
       penalty, exactHit, specialRule, losses, eliminated, finalWinner: remaining.length === 1 ? identity(remaining[0]) : null, allEliminated: remaining.length === 0 };
-    if (room.solo) {
+    if (room.solo || room.friend) {
       room.botHistory.push({ target, values: room.result.values.map(p => ({ seat: p.seat, value: p.value })) });
       room.botHistory = room.botHistory.slice(-12);
       for (const p of room.players) delete p.plan;
@@ -90,10 +90,10 @@ function createGameServer({ now = Date.now } = {}) {
     room.history = room.history.slice(0, 12);
   }
   function advance(room) {
-    if (room.solo) {
+    if (room.solo || room.friend) {
       if (room.phase === "result" && now() >= room.scoreAnnouncementUntil) {
         for (const p of room.players) if (p.bot !== undefined && !p.eliminated) p.ready = true;
-        if (room.players[0].eliminated && now() >= room.announcementUntil) begin(room);
+        if (room.players.filter(p=>p.token && p.bot === undefined).every(p=>p.eliminated) && now() >= room.announcementUntil) begin(room);
       }
       if (room.phase === "playing") {
         for (const p of room.players) {
@@ -107,7 +107,7 @@ function createGameServer({ now = Date.now } = {}) {
     settle(room);
   }
   function releaseIdleSeats(room) {
-    if (room.demo || room.solo) return;
+    if (room.demo || room.solo || room.friend) return;
     if (room.phase !== "lobby") return;
     for (const p of room.players) {
       if (p.token && now() - p.lastSeen >= 120000) {
@@ -129,7 +129,7 @@ function createGameServer({ now = Date.now } = {}) {
         const demo = url.pathname === "/api/demo";
         const solo = url.pathname === "/api/solo";
         for (const room of rooms.values()) {
-          if (Boolean(room.demo) !== demo || Boolean(room.solo) !== solo) continue;
+          if (room.friend || Boolean(room.demo) !== demo || Boolean(room.solo) !== solo) continue;
           releaseIdleSeats(room);
           advance(room);
           const me = room.players.find(p => p.token === token);
@@ -138,7 +138,7 @@ function createGameServer({ now = Date.now } = {}) {
             return sendJson(res, 200, state(room, me));
           }
         }
-        const room = (!demo && !solo && [...rooms.values()].find(r => !r.demo && !r.solo && r.phase === "lobby" && r.players.some(p => !p.token))) || createRoom();
+        const room = (!demo && !solo && [...rooms.values()].find(r => !r.friend && !r.demo && !r.solo && r.phase === "lobby" && r.players.some(p => !p.token))) || createRoom();
         room.demo = demo;
         room.solo = solo;
         if (solo) room.botHistory = [];
@@ -153,6 +153,30 @@ function createGameServer({ now = Date.now } = {}) {
         }
         return sendJson(res, 201, state(room, me));
       }
+
+      if (req.method === "POST" && ["/api/friends/create", "/api/friends/join"].includes(url.pathname)) {
+        const body = await readBody(req);
+        const token = (req.headers.authorization || "").replace(/^Bearer /, "");
+        if (!/^[a-f0-9]{48}$/.test(token) || typeof body.name !== "string" || !body.name.trim()) return sendJson(res, 400, {error:"请输入昵称并允许浏览器保存身份。"});
+        let room;
+        if (url.pathname.endsWith("/create")) {
+          room = [...rooms.values()].find(r=>r.friend && r.hostToken===token && r.phase!=="finished");
+          if (!room) { room=createRoom(); room.friend=true; room.hostToken=token; room.botHistory=[]; room.rosterVersion=0; }
+        } else {
+          const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+          room=rooms.get(code);
+          if (!room?.friend) return sendJson(res,404,{error:"好友房不存在，请检查房间码。"});
+        }
+        const existing=room.players.find(p=>p.token===token);
+        if (existing) return sendJson(res,200,state(room,existing));
+        if (room.phase!=="lobby") return sendJson(res,409,{error:"对局已开始，不能中途加入。"});
+        const me=room.players.find(p=>!p.token);
+        if (!me) return sendJson(res,409,{error:"房间已满，请房主先减少机器人数量。"});
+        me.token=token; me.name=body.name.trim().slice(0,16); me.lastSeen=now();
+        room.rosterVersion++;
+        for (const p of room.players) p.ready=p.bot!==undefined;
+        return sendJson(res,200,state(room,me));
+      }
       const match = url.pathname.match(/^\/api\/rooms\/([A-F0-9]{6})(?:\/(\w+))?$/);
       if (match) {
         const room = rooms.get(match[1]);
@@ -165,11 +189,26 @@ function createGameServer({ now = Date.now } = {}) {
         advance(room);
         const action = match[2];
         if (req.method === "GET" && !action) return sendJson(res, 200, state(room, me));
-        if (req.method !== "POST" || !["join", "ready", "submit", "demo_step", "dismiss_rules"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
+        if (req.method !== "POST" || !["join", "ready", "submit", "demo_step", "dismiss_rules", "configure_bots"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
         const body = await readBody(req);
         // Recheck after awaiting the request body: the deadline or round may have changed.
         if (me.token !== token) return sendJson(res, 403, { error: "座位已失效，请返回首页重新加入。" });
         advance(room);
+
+        if (action === "configure_bots") {
+          if (!room.friend || room.hostToken!==token) return sendJson(res,403,{error:"只有好友房房主能设置机器人。"});
+          if (room.phase!=="lobby") return sendJson(res,409,{error:"开局后阵容固定。"});
+          const ids=body.profiles;
+          if (!Array.isArray(ids) || ids.length>4 || new Set(ids).size!==ids.length || ids.some(id=>!Number.isInteger(id)||id<0||id>=BOT_PROFILES.length)) return sendJson(res,400,{error:"请选择不重复的机器人类型。"});
+          const humans=room.players.filter(p=>p.token && p.bot===undefined).length;
+          if (humans+ids.length>5) return sendJson(res,409,{error:"真人与机器人合计不能超过五人。"});
+          for (const p of room.players) if (p.bot!==undefined) { p.token=null; p.name=`玩家 ${p.seat}`; delete p.bot; }
+          const empty=room.players.filter(p=>!p.token);
+          ids.forEach((id,i)=>{const p=empty[i];p.bot=id;p.token=crypto.randomBytes(24).toString("hex");p.name=BOT_PROFILES[id].name;});
+          room.rosterVersion++;
+          for (const p of room.players) p.ready=p.bot!==undefined;
+          return sendJson(res,200,state(room,me));
+        }
         if (action === "dismiss_rules") {
           if (body.round !== room.round || room.phase !== "result" || !room.newRules.length || now() < room.scoreAnnouncementUntil) return sendJson(res, 409, { error: "当前没有可关闭的追加规则。" });
           me.rulesReadRound = room.round;
@@ -193,6 +232,7 @@ function createGameServer({ now = Date.now } = {}) {
         } else {
           if (body.round !== room.round || me.eliminated) return sendJson(res, 409, { error: "轮次已变化或你已淘汰，请同步后重试。" });
           if (action === "ready") {
+            if (room.friend && body.rosterVersion !== room.rosterVersion) return sendJson(res,409,{error:"阵容已变化，请查看后重新准备。"});
             if (now() < room.announcementUntil && me.rulesReadRound !== room.round) return sendJson(res, 409, { error: "请等待记分和追加规则播报结束。" });
             if (!["lobby", "result"].includes(room.phase)) return sendJson(res, 409, { error: "当前不能准备" });
             me.ready = true;

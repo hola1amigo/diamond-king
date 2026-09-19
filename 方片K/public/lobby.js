@@ -3,10 +3,13 @@ const joinBtn = document.querySelector("#joinBtn");
 try { nickname.value = localStorage.getItem("diamond-king-name") || ""; } catch {}
 document.querySelector("#joinForm").addEventListener("submit", async event => {
   event.preventDefault();
+  const createFriend = event.submitter?.id === "createFriendBtn";
+  const joinFriend = event.submitter?.id === "joinFriendBtn";
   const demo = event.submitter?.id === "demoBtn";
   const solo = event.submitter?.id === "soloBtn";
   if ((demo || solo) && !nickname.value.trim()) nickname.value = solo ? "挑战者" : "体验玩家";
   if (!nickname.value.trim()) return setText("#status", "请输入昵称。");
+  document.querySelectorAll("#joinForm button").forEach(button=>button.disabled=true);
   joinBtn.disabled = true; document.querySelector("#demoBtn").disabled = true; document.querySelector("#soloBtn").disabled = true;
   setText("#status", "正在连接并分配房间；免费服务首次唤醒可能需要约一分钟，请稍候。这个页面可以重试，不会重复占座。");
   try {
@@ -17,10 +20,11 @@ document.querySelector("#joinForm").addEventListener("submit", async event => {
     }
     localStorage.setItem("diamond-king-name", nickname.value.trim());
     api.token = token;
-    const room = await api.post(solo ? "/api/solo" : demo ? "/api/demo" : "/api/match", { name: nickname.value.trim() }, 90000);
+    const room = await api.post(createFriend ? "/api/friends/create" : joinFriend ? "/api/friends/join" : solo ? "/api/solo" : demo ? "/api/demo" : "/api/match", { name: nickname.value.trim(), code: document.querySelector("#friendCode").value.trim() }, 90000);
     location.assign(`/player.html?room=${encodeURIComponent(room.code)}`);
   } catch (error) {
     setText("#status", `加入失败：${error.message}。请允许浏览器本地存储后重试；若服务刚启动，可稍后再试。`);
+    document.querySelectorAll("#joinForm button").forEach(button=>button.disabled=false);
     joinBtn.disabled = false; document.querySelector("#demoBtn").disabled = false; document.querySelector("#soloBtn").disabled = false;
   }
 });

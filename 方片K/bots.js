@@ -1,19 +1,49 @@
 const { evaluateRound } = require("./round");
 
 const BOT_PROFILES = [
-  { name: "砺石", style: "稳健", memory: 12, prior: 40, risk: 2, collision: .12, pressure: .04, weights: [3,1,1,1,1] },
-  { name: "逐流", style: "趋势", memory: 8, prior: 32, risk: 1, collision: .08, pressure: .08, weights: [1,2,3,1,1] },
-  { name: "算子", style: "推演", memory: 12, prior: 26, risk: 1.5, collision: .16, pressure: .1, weights: [1,1,1,3,2] },
-  { name: "逆锋", style: "反向", memory: 10, prior: 46, risk: .6, collision: .4, pressure: .16, weights: [1,1,1,2,3] }
+  { name: "砺石", style: "直觉", depth: 1, memory: 12, prior: 50, risk: 2, collision: .12, pressure: .04, weights: [3,1,1,1,1] },
+  { name: "逐流", style: "推理", depth: 2, memory: 8, prior: 50, risk: 1, collision: .08, pressure: .08, weights: [1,2,3,1,1] },
+  { name: "算子", style: "深算", depth: 3, memory: 12, prior: 50, risk: 1.5, collision: .16, pressure: .1, weights: [1,1,1,3,2] },
+  { name: "逆锋", style: "适应", depth: null, memory: 10, prior: 50, risk: .6, collision: .4, pressure: .16, weights: [1,1,1,2,3] }
 ];
 const clamp = value => Math.max(0, Math.min(100, Math.round(value)));
 const median = values => { const sorted = [...values].sort((a,b) => a-b); return sorted[Math.floor(sorted.length / 2)]; };
+
+// Level 1 responds to observed behaviour. Higher levels additionally imagine
+// simultaneous opponent responses; the final decision always uses actual rules.
+function projectResponses(values, depth) {
+  let projected = values;
+  for (let level=1;level<depth;level++) {
+    const sum=projected.reduce((s,p)=>s+p.value,0);
+    projected=projected.map(p=>({...p,value:clamp(.8*(sum-p.value)/(projected.length-.8))}));
+  }
+  return projected;
+}
+function reasoningDepth(style, records, players) {
+  if (style.depth!==null) return style.depth;
+  // Backtest depths against subsequent public choices, without current inputs.
+  const errors=[0,0,0], weights=[0,0,0];
+  for(let i=1;i<records.length;i++) {
+    const previous=records[i-1].values.filter(p=>Number.isInteger(p.value) && players.some(a=>a.seat===p.seat));
+    if(previous.length!==players.length) continue;
+    for(let depth=1;depth<=3;depth++) {
+      const predicted=projectResponses(previous,depth);
+      for(const p of predicted) {
+        const actual=records[i].values.find(a=>a.seat===p.seat)?.value;
+        if(Number.isInteger(actual)){errors[depth-1]+=i*Math.abs(p.value-actual);weights[depth-1]+=i;}
+      }
+    }
+  }
+  const losses=errors.map((e,i)=>weights[i]?e/weights[i]:Infinity);
+  return losses.every(v=>v===Infinity) ? 2 : losses.indexOf(Math.min(...losses))+1;
+}
 
 // Input contains public scores and completed rounds only. No room, tokens,
 // current submissions, other bots' plans or cross-game memory are accessible.
 function chooseBotNumber({ seat, profile, players, history, stage }, random = Math.random) {
   const style = BOT_PROFILES[profile];
   const records = history.slice(-style.memory);
+  const depth = players.length === 2 ? 1 : reasoningDepth(style, records, players);
   const opponents = players.filter(p => p.seat !== seat);
   const models = opponents.map(opponent => {
     // Keep missing rounds in place: a timeout must not become an alternating turn.
@@ -57,13 +87,13 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
       const shockDiscount = isolatedJump && (model === 1 || model === 2) ? .08 : 1;
       return { value: predict(series.length,model), error, weight: prior * shockDiscount / (2 + error) ** 2 };
     });
-    return { forecasts, total: forecasts.reduce((sum,p)=>sum+p.weight,0), noise: .2 };
+    return { forecasts, total: forecasts.reduce((sum,p)=>sum+p.weight,0), noise: .2, patterned: (isolatedJump && deviation<=1) || series.length>=4 && series.slice(-4).every(Number.isInteger) && series.at(-1)===series.at(-3) && series.at(-2)===series.at(-4) };
   });
   const scores = Array(101).fill(0);
   const self = players.find(p => p.seat === seat);
   // Fixed work per turn. Every integer is evaluated against the same scenarios.
   for (let sample = 0; sample < 72; sample++) {
-    const predicted = opponents.map((p, i) => {
+    let predicted = opponents.map((p, i) => {
       const model = models[i];
       let pick = random() * model.total;
       const forecast = model.forecasts.find(f => (pick -= f.weight) <= 0) || model.forecasts.at(-1);
@@ -74,6 +104,12 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
         : forecast.value;
       return { seat: p.seat, value };
     });
+
+    if(depth>1 && !(records.length>=4 && models.every(m=>m.patterned || Math.min(...m.forecasts.map(f=>f.error))<=1))) {
+      const ownObserved=records.at(-1)?.values.find(p=>p.seat===seat)?.value;
+      const assumedSelf=Number.isInteger(ownObserved)?ownObserved:style.prior;
+      predicted=projectResponses([{seat,value:assumedSelf},...predicted],depth).filter(p=>p.seat!==seat);
+    }
     for (let value = 0; value <= 100; value++) {
       const outcome = evaluateRound([{ seat, value }, ...predicted], stage);
       const ownLoss = outcome.losses[0].deduction;
