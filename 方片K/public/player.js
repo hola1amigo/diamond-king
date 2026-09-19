@@ -12,12 +12,12 @@ const demoStepBtn = document.querySelector("#demoStepBtn");
 let announcementKey = null;
 announcement.addEventListener("cancel", event => event.preventDefault());
 function showAnnouncement(state) {
-  if (!state?.result) return;
+  if (!state?.result) { if (announcement.open) announcement.close(); return; }
   const serverTime = state.serverNow + performance.now() - syncedAt;
   const scoring = serverTime < state.scoreAnnouncementUntil;
   const victory = !scoring && Boolean(state.result.finalWinner);
   const active = serverTime < state.announcementUntil;
-  if (!active) {
+  if (!active || (!scoring && !victory && state.me.rulesDismissed)) {
     if (announcement.open) { announcement.close(); controls(); }
     return;
   }
@@ -28,14 +28,16 @@ function showAnnouncement(state) {
     announcementKey = key;
     announcement.dataset.phase = scoring ? "score" : victory ? "victory" : "rules";
     announcement.scrollTop = 0;
-    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束 · 胜利播报" : "追加规则公布");
+    document.querySelector("#announcementClose").hidden = scoring || victory;
+    document.querySelector("#announcementCountdown").hidden = victory;
+    setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束" : "追加规则公布");
     const eliminated = state.result.eliminated || [];
     setText("#announcementEliminated", scoring && eliminated.length ? `本轮淘汰：${eliminated.map(p => `${p.seat} 号 ${p.name}（${p.score} 分）`).join("、")}` : "");
     const score = document.querySelector("#announcementScore");
     score.hidden = !scoring && !victory;
     if (victory) {
       const winner = state.result.finalWinner;
-      score.innerHTML = `<p class="ok">恭喜 ${winner.seat} 号玩家 ${escapeHtml(winner.name)} 获得胜利！</p><p>方片 K 挑战结束。</p>`;
+      score.innerHTML = `<p class="ok">${escapeHtml(winner.name)} 获得胜利</p><p>方片K挑战结束</p>`;
     }
     if (scoring) {
       const r = state.result;
@@ -89,7 +91,7 @@ function controls() {
   readyBtn.disabled = busy || !connected || !me || me.eliminated || me.ready || !["lobby", "result"].includes(latest.phase);
   submitBtn.disabled = busy || !connected || !me || me.eliminated || me.submitted || latest.phase !== "playing";
   valueInput.disabled = submitBtn.disabled;
-  const announcing = announcement.open || (latest?.announcementUntil || 0) > (latest?.serverNow || 0) + performance.now() - syncedAt;
+  const announcing = announcement.open || (!latest?.me?.rulesDismissed && (latest?.announcementUntil || 0) > (latest?.serverNow || 0) + performance.now() - syncedAt);
   readyBtn.disabled ||= announcing || Boolean(latest?.demo);
   saveNameBtn.disabled ||= Boolean(latest?.demo);
   nameInput.disabled = saveNameBtn.disabled;
@@ -150,6 +152,7 @@ async function act(action, data) {
     try { await refresh(); } catch { connected = false; }
   } finally { busy = false; controls(); }
 }
+document.querySelector("#announcementClose").addEventListener("click", () => act("dismiss_rules", {}));
 demoStepBtn.addEventListener("click", () => act("demo_step", {}));
 saveNameBtn.addEventListener("click", () => act("join", { name: nameInput.value }));
 readyBtn.addEventListener("click", () => act("ready", {}));

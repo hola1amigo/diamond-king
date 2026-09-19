@@ -15,7 +15,7 @@ const BASE_RULES = [
 ];
 const EXTRA_RULES = [
   "相同数字无效，不能获胜，但仍计入平均数。",
-  "胜负仍按原始目标值比较距离；获胜者选数等于目标值四舍五入后的整数，视为精确命中，其他已提交的失败者扣 2 分。",
+  "选数等于目标值四舍五入后的整数，视为精确命中，其余失败者扣 2 分。",
   "两人对决时，若一方选 0、另一方选 100，100 获胜。"
 ];
 const stageFor = (count) => Math.min(3, 5 - count);
@@ -36,7 +36,7 @@ function createGameServer({ now = Date.now } = {}) {
     const view = (p) => ({ ...identity(p), bot: p.bot === undefined ? null : BOT_PROFILES[p.bot].style, joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
     return { code: room.code, demo: Boolean(room.demo), solo: Boolean(room.solo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
       activeCount: room.players.filter(p => !p.eliminated).length,
-      me: me ? { ...view(me), value: me.value } : null, players: room.players.map(view),
+      me: me ? { ...view(me), value: me.value, rulesDismissed: me.rulesReadRound === room.round } : null, players: room.players.map(view),
       visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, hideNewRules ? room.stage - room.newRules.length : room.stage)], newRules: hideNewRules ? [] : room.newRules,
       result: room.result, history: room.history };
   }
@@ -91,9 +91,9 @@ function createGameServer({ now = Date.now } = {}) {
   }
   function advance(room) {
     if (room.solo) {
-      if (room.phase === "result" && now() >= room.announcementUntil) {
+      if (room.phase === "result" && now() >= room.scoreAnnouncementUntil) {
         for (const p of room.players) if (p.bot !== undefined && !p.eliminated) p.ready = true;
-        if (room.players[0].eliminated) begin(room);
+        if (room.players[0].eliminated && now() >= room.announcementUntil) begin(room);
       }
       if (room.phase === "playing") {
         for (const p of room.players) {
@@ -165,13 +165,18 @@ function createGameServer({ now = Date.now } = {}) {
         advance(room);
         const action = match[2];
         if (req.method === "GET" && !action) return sendJson(res, 200, state(room, me));
-        if (req.method !== "POST" || !["join", "ready", "submit", "demo_step"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
+        if (req.method !== "POST" || !["join", "ready", "submit", "demo_step", "dismiss_rules"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
         const body = await readBody(req);
         // Recheck after awaiting the request body: the deadline or round may have changed.
         if (me.token !== token) return sendJson(res, 403, { error: "座位已失效，请返回首页重新加入。" });
         advance(room);
+        if (action === "dismiss_rules") {
+          if (body.round !== room.round || room.phase !== "result" || !room.newRules.length || now() < room.scoreAnnouncementUntil) return sendJson(res, 409, { error: "当前没有可关闭的追加规则。" });
+          me.rulesReadRound = room.round;
+          return sendJson(res, 200, state(room, me));
+        }
         if (action === "demo_step") {
-          if (!room.demo || me.seat !== 1 || body.round !== room.round || !["lobby", "result"].includes(room.phase) || now() < room.announcementUntil) return sendJson(res, 409, { error: "当前不能推进演示，请等待播报结束。" });
+          if (!room.demo || me.seat !== 1 || body.round !== room.round || !["lobby", "result"].includes(room.phase) || (now() < room.announcementUntil && me.rulesReadRound !== room.round)) return sendJson(res, 409, { error: "当前不能推进演示，请等待播报结束。" });
           begin(room);
           const active = room.players.filter(p => !p.eliminated);
           const victim = active.length === 2 ? me : active[active.length - 1];
@@ -188,7 +193,7 @@ function createGameServer({ now = Date.now } = {}) {
         } else {
           if (body.round !== room.round || me.eliminated) return sendJson(res, 409, { error: "轮次已变化或你已淘汰，请同步后重试。" });
           if (action === "ready") {
-            if (now() < room.announcementUntil) return sendJson(res, 409, { error: "请等待记分和追加规则播报结束。" });
+            if (now() < room.announcementUntil && me.rulesReadRound !== room.round) return sendJson(res, 409, { error: "请等待记分和追加规则播报结束。" });
             if (!["lobby", "result"].includes(room.phase)) return sendJson(res, 409, { error: "当前不能准备" });
             me.ready = true;
             if (room.players.filter(p => !p.eliminated).every(p => p.token && p.ready)) begin(room);

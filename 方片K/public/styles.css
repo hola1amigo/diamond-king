@@ -492,3 +492,4 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
   .entry-footer { display: block; font-size: 10px; padding-top: 14px; }
   .entry-footer p { margin-top: 6px; }
 }
+#announcement #announcementClose { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0; line-height: 1; font-size: 24px; color: #cfe5ca; background: transparent; border: 1px solid #718c89; z-index: 2; }

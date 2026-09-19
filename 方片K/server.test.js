@@ -330,3 +330,24 @@ test("solo challenge commits private bot choices before human input and complete
 });
 
 
+test("rules can be dismissed per player after scoring without skipping other players", async t => {
+  const g = await setup(t);
+  await g.ready();
+  g.room.players[4].score = -9;
+  await g.submit([[1,5],[2,10],[3,15],[4,20],[5,100]]);
+  const round = g.room.round;
+  assert.equal((await g.request(1,"dismiss_rules",{round})).status,409);
+  g.advance(12000);
+  assert.equal((await g.request(1,"dismiss_rules",{round:round-1})).status,409);
+  assert.equal((await g.request(1,"dismiss_rules",{round})).body.me.rulesDismissed,true);
+  assert.equal((await g.request(1)).body.me.rulesDismissed,true);
+  assert.equal((await g.request(1,"ready",{round})).status,200);
+  assert.equal((await g.request(2,"ready",{round})).status,409);
+  assert.equal(g.room.phase,"result");
+  for (const seat of [2,3,4]) {
+    assert.equal((await g.request(seat,"dismiss_rules",{round})).status,200);
+    assert.equal((await g.request(seat,"ready",{round})).status,200);
+  }
+  assert.equal(g.room.phase,"playing");
+  assert.equal((await g.request(1)).body.me.rulesDismissed,false);
+});
