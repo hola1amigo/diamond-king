@@ -40,7 +40,7 @@ function reasoningDepth(style, records, players) {
 
 // Input contains public scores and completed rounds only. No room, tokens,
 // current submissions, other bots' plans or cross-game memory are accessible.
-function chooseBotNumber({ seat, profile, players, history, stage }, random = Math.random) {
+function chooseBotDecision({ seat, profile, players, history, stage, round = history.length + 1, tactics = {} }, random = Math.random) {
   const style = BOT_PROFILES[profile];
   const records = history.slice(-style.memory);
   const depth = players.length === 2 ? 1 : reasoningDepth(style, records, players);
@@ -91,6 +91,9 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
   });
   const scores = Array(101).fill(0);
   const self = players.find(p => p.seat === seat);
+  const leaders = opponents.filter(p => p.score === Math.max(...players.map(a=>a.score)));
+  const leader = leaders.length === 1 ? leaders[0] : null;
+  const ownLosses = Array(101).fill(0), leaderLosses = Array(101).fill(0);
   // Fixed work per turn. Every integer is evaluated against the same scenarios.
   for (let sample = 0; sample < 72; sample++) {
     let predicted = opponents.map((p, i) => {
@@ -108,16 +111,24 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
     if(depth>1 && !(records.length>=4 && models.every(m=>m.patterned || Math.min(...m.forecasts.map(f=>f.error))<=1))) {
       const ownObserved=records.at(-1)?.values.find(p=>p.seat===seat)?.value;
       const assumedSelf=Number.isInteger(ownObserved)?ownObserved:style.prior;
-      predicted=projectResponses([{seat,value:assumedSelf},...predicted],depth).filter(p=>p.seat!==seat);
+      const projected=projectResponses([{seat,value:assumedSelf},...predicted],depth).filter(p=>p.seat!==seat);
+      predicted=predicted.map((p,i)=>{
+        // A single deep player must not drag well-established opponents down.
+        if (records.length>=4 && (models[i].patterned || Math.min(...models[i].forecasts.map(f=>f.error))<=1)) return p;
+        const pace=records.length>=3 ? [0,.5,.8,.65][profile] : 1;
+        return {...p,value:clamp(p.value+pace*(projected[i].value-p.value))};
+      });
     }
     for (let value = 0; value <= 100; value++) {
       const outcome = evaluateRound([{ seat, value }, ...predicted], stage);
       const ownLoss = outcome.losses[0].deduction;
+      ownLosses[value] += ownLoss;
+      if (leader) leaderLosses[value] += outcome.losses.find(p=>p.seat===leader.seat).deduction;
       const winning = outcome.winners.some(p => p.seat === seat);
       const eliminated = self.score - ownLoss <= -10;
       const rivalsOut = opponents.filter(p => p.score - outcome.losses.find(loss => loss.seat === p.seat).deduction <= -10).length;
-      const leader = Math.max(...players.map(p=>p.score));
-      const leaderLoss = opponents.filter(p=>p.score===leader).reduce((sum,p)=>sum+outcome.losses.find(loss=>loss.seat===p.seat).deduction,0);
+      const leaderScore = Math.max(...players.map(p=>p.score));
+      const leaderLoss = opponents.filter(p=>p.score===leaderScore).reduce((sum,p)=>sum+outcome.losses.find(loss=>loss.seat===p.seat).deduction,0);
       const collision = stage >= 1 && predicted.some(p=>p.value===value);
       scores[value] += -ownLoss + (winning ? .25 : 0) - (eliminated ? 1 + style.risk : 0) + rivalsOut * .15
         + (self.score > -8 ? style.pressure * leaderLoss : 0) - (collision ? style.collision : 0)
@@ -128,7 +139,39 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
   // Variation is restricted to near-best choices, never a uniform 0..100 draw.
   const candidates = scores.map((score, value) => ({ score, value })).filter(p => p.score >= best - 2)
     .sort((a, b) => b.score - a.score).slice(0, 4);
-  return candidates[Math.floor(random() * candidates.length)].value;
+  const baseline = candidates[Math.floor(random() * candidates.length)].value;
+  const normal = { value: baseline, tactic: null };
+  // Spend only a bounded expected loss, and only when a predictable rival
+  // loses more than we do. Never use a human/bot identity or another bot's plan.
+  const budget = [0, .2, .4, .6][profile];
+  if (!budget || !leader || leader.score-self.score<2 || self.score < -5 ||
+      self.score-(stage>=2?2:1)<-7 || records.length<4 || players.length<3 ||
+      round <= (tactics.cooldownUntil || 0) || (tactics.failures || 0)>=2) return normal;
+  const model=models[opponents.findIndex(p=>p.seat===leader.seat)];
+  if (Math.min(...model.forecasts.map(f=>f.error))>6) return normal;
+  const options=scores.map((_,value)=>{
+    const cost=(ownLosses[value]-ownLosses[baseline])/72;
+    const gain=(leaderLosses[value]-leaderLosses[baseline])/72;
+    return {value,cost,gain,benefit:gain-cost};
+  }).filter(p=>p.value!==baseline && p.cost>0 && p.cost<=budget && p.benefit>=.15);
+  if (!options.length || random()>[0,.25,.4,.55][profile]) return normal;
+  options.sort((a,b)=>b.benefit-a.benefit || a.cost-b.cost || a.value-b.value);
+  const chosen=options[0];
+  return {value:chosen.value,tactic:{baseline,targetSeat:leader.seat,expectedCost:chosen.cost,expectedGain:chosen.gain}};
 }
 
-module.exports = { BOT_PROFILES, chooseBotNumber };
+function chooseBotNumber(input, random = Math.random) { return chooseBotDecision(input, random).value; }
+
+// Compare with the normal choice against the now-public actual choices.
+// This is a one-round counterfactual, not a claim to know future responses.
+function reviewBotTactic(tactics, tactic, seat, values, stage, round) {
+  const actual=evaluateRound(values,stage);
+  const normal=evaluateRound(values.map(p=>p.seat===seat?{...p,value:tactic.baseline}:p),stage);
+  const loss=(result,id)=>result.losses.find(p=>p.seat===id)?.deduction || 0;
+  const gain=loss(actual,tactic.targetSeat)-loss(normal,tactic.targetSeat);
+  const cost=loss(actual,seat)-loss(normal,seat);
+  const failed=gain<=0 || gain<=cost;
+  return {failures:(tactics.failures || 0)+(failed?1:0),cooldownUntil:round+(failed?4:2)};
+}
+
+module.exports = { BOT_PROFILES, chooseBotNumber, chooseBotDecision, reviewBotTactic };

@@ -483,3 +483,63 @@ test("nonidentical choices and timeouts break the unanimous streak",async t=>{
   await g.ready();await all();assert.equal(g.room.stage,0);
   await g.ready();await all();assert.equal(g.room.stage,1);
 });
+test("score-funded tactics require affordable cost, predictable unique leader and no cooldown",()=>{
+ const {chooseBotDecision}=require("./bots");
+ const players=[0,-2,-6,-7,-5].map((score,i)=>({seat:i+1,score}));
+ const rows=[[30,6,48,20,59],[31,6,51,21,56],[32,7,48,20,56],[28,4,48,19,60],[28,6,48,22,57],[29,5,50,22,56]];
+ const history=rows.map(row=>({values:row.map((value,i)=>({seat:i+1,value})),target:row.reduce((s,v)=>s+v,0)*.8/5}));
+ const input={seat:2,profile:3,players,history,stage:0,round:7};
+ const choose=override=>{let seed=123;return chooseBotDecision({...input,...override},()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296));};
+ const original=JSON.stringify(input);
+ const decision=choose({});
+ assert.ok(decision.tactic);
+ assert.ok(decision.tactic.expectedCost>0 && decision.tactic.expectedCost<=.6);
+ assert.ok(decision.tactic.expectedGain>decision.tactic.expectedCost);
+ assert.equal(choose({tactics:{cooldownUntil:9}}).value,decision.tactic.baseline);
+ for(const override of [
+   {players:players.map(p=>p.seat===2?{...p,score:-6}:p)},
+   {players:players.map(p=>p.seat===3?{...p,score:0}:p)},
+   {players:players.map(p=>p.seat===2?{...p,score:-1}:p)},
+   {tactics:{failures:2}},
+   {history:history.slice(0,2)},
+   {profile:0}
+ ]) assert.equal(choose(override).tactic,null);
+ const permuted=players.map(p=>({...p,seat:p.seat+10}));
+ let seed=123;
+ const other=chooseBotDecision({...input,seat:12,players:permuted,history:history.map(r=>({...r,values:r.values.map(p=>({...p,seat:p.seat+10}))}))},()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296));
+ assert.equal(other.value,decision.value);
+ assert.equal(other.tactic.targetSeat,11);
+ assert.equal(JSON.stringify(input),original);
+});
+test("failed tactical attempts cool down and accumulate a stop budget",()=>{
+ const {reviewBotTactic}=require("./bots");
+ const tactic={baseline:0,targetSeat:1};
+ const values=[10,20,50,50,50].map((value,i)=>({seat:i+1,value}));
+ const success=reviewBotTactic({},tactic,2,values,0,7);
+ assert.equal(success.failures,0);assert.equal(success.cooldownUntil,9);
+ const failed=reviewBotTactic({},tactic,2,values.map(p=>({...p,value:0})),0,7);
+ assert.equal(failed.failures,1);assert.equal(failed.cooldownUntil,11);
+ const again=reviewBotTactic(failed,tactic,2,values.map(p=>({...p,value:0})),0,12);
+ assert.equal(again.failures,2);assert.equal(again.cooldownUntil,16);
+});
+test("server privately reviews tactical choices after settlement and retains cooldown",async t=>{
+ const g=await setup(t);
+ const headers={"content-type":"application/json",Authorization:"Bearer "+g.tokens[0]};
+ let s=await(await fetch(g.base+"/api/solo",{method:"POST",headers,body:JSON.stringify({name:"测试"})})).json();
+ const room=g.rooms.get(s.code), path=g.base+"/api/rooms/"+s.code;
+ await fetch(path+"/ready",{method:"POST",headers,body:JSON.stringify({round:0})});
+ for(const p of room.players){p.value=0;p.submitted=true;}
+ room.players[1].plan.tactic={baseline:0,targetSeat:1};
+ g.settle(room);
+ assert.equal(room.players[1].tactics.failures,1);
+ assert.equal(room.players[1].tactics.cooldownUntil,5);
+ assert.equal(room.players[1].plan,undefined);
+ s=await(await fetch(path,{headers})).json();
+ assert.ok(s.players.every(p=>!("tactics" in p)&&!("plan" in p)));
+ assert.equal(s.me.tactics,undefined);
+ g.advance(24000);
+ s=await(await fetch(path+"/ready",{method:"POST",headers,body:JSON.stringify({round:1})})).json();
+ assert.equal(s.phase,"playing");
+ assert.equal(room.players[1].plan.tactic,null);
+ assert.equal(room.players[1].tactics.failures,1);
+});

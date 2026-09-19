@@ -11,7 +11,7 @@
     <header><div><p class="eyebrow">ALICE IN BORDERLAND · 智力游戏</p><h1><span class="suit" aria-hidden="true">♦</span> 方片 K</h1><p class="muted" id="roomInfo">连接中</p></div><div class="chip" id="roundChip">等待开始</div></header>
     <section class="panel" id="demoPanel" hidden><h2>单人流程演示</h2><p>四名模拟玩家自动选数。每轮预设一人处于 −9 分，依次演示淘汰、规则解锁，最后演示你被淘汰。不是公平对战，也不影响真人房间。</p><button id="demoStepBtn">演示下一轮（自动选数）</button></section><section class="panel" id="eliminationPanel" hidden><h2 class="danger">你已淘汰</h2><p id="eliminationText"></p></section><section class="panel stack">
       <div id="friendPanel" hidden><h2>好友房 <span id="friendRoomCode"></span></h2><p>将房间码发给朋友，在首页选择“加入好友房”。真人和机器人合计五人，真人全部准备后开局。</p><div id="friendHost" hidden><p>勾选要加入的机器人（0～4 名），保存后请大家重新准备。</p><div id="friendBots"></div><button id="saveBotsBtn" type="button">保存机器人阵容</button></div><p id="friendRoster" class="muted"></p></div>
-      <div id="soloPanel" hidden><strong>单人挑战 · 四位策略机器人</strong><p class="muted">正常选数、计分与淘汰。机器人只参考本局已公开结果，每轮独立决定数字。</p><details><summary>认识你的对手</summary><p class="muted">砺石：直觉型，一层判断。<br>逐流：推理型，考虑对手的一次回应。<br>算子：深算型，再多推演一次回应。<br>逆锋：适应型，用历史检验不同深度。<br>四位都会随公开结果调整判断，不保证最优，也不会跨局记忆。</p></details></div>
+      <div id="soloPanel" hidden><strong>单人挑战 · 四位策略机器人</strong><p class="muted">正常选数、计分与淘汰。机器人只参考本局已公开结果，每轮独立决定数字。</p><details><summary>认识你的对手</summary><p class="muted">砺石：直觉型，一层判断。<br>逐流：推理型，考虑对手的一次回应。<br>算子：深算型，再多推演一次回应。<br>逆锋：适应型，用历史检验不同深度。<br>四位都会随公开结果调整判断。积分安全时，部分机器人会试探领先者，失败后冷却止损；不保证最优，也不会跨局记忆。</p></details></div>
       <h2 id="nameTitle">座位</h2>
       <p id="timer" role="timer">等待同步</p>
       <div class="grid">

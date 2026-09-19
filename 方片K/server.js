@@ -4,7 +4,7 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 const { evaluateRound } = require("./round");
-const { BOT_PROFILES, chooseBotNumber } = require("./bots");
+const { BOT_PROFILES, chooseBotDecision, reviewBotTactic } = require("./bots");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_RULES = [
@@ -51,7 +51,7 @@ function createGameServer({ now = Date.now } = {}) {
     if (room.solo || room.friend) {
       const players = room.players.filter(p => !p.eliminated).map(p => ({ seat: p.seat, score: p.score }));
       for (const p of room.players.filter(p => p.bot !== undefined && !p.eliminated)) {
-        p.plan = { value: chooseBotNumber({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage }), submitAt: now() + crypto.randomInt(2000, 6001) };
+        p.plan = { ...chooseBotDecision({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage, round: room.round, tactics: p.tactics }), submitAt: now() + crypto.randomInt(2000, 6001) };
       }
     }
   }
@@ -59,6 +59,9 @@ function createGameServer({ now = Date.now } = {}) {
     if (room.phase !== "playing") return;
     const active = room.players.filter(p => !p.eliminated);
     if (now() < room.deadline && active.some(p => !p.submitted)) return;
+    for (const p of active) if (p.plan?.tactic) {
+      p.tactics=reviewBotTactic(p.tactics || {},p.plan.tactic,p.seat,active.map(a=>({seat:a.seat,value:a.submitted?a.value:null})),room.stage,room.round);
+    }
     const outcome = evaluateRound(active.map(p => ({ seat: p.seat, value: p.submitted ? p.value : null })), room.stage);
     const { average, target, duplicated, exactHit, penalty, specialRule } = outcome;
     const winners = active.filter(p => outcome.winners.some(winner => winner.seat === p.seat));
