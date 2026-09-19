@@ -30,10 +30,10 @@ function renderRules(el, rules) {
 function animateSettlement(el) {
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   el.querySelectorAll(".round-winner").forEach(node => node.animate([
-    { borderColor: "#fff", boxShadow: "0 0 12px #fff5" },
-    { borderColor: "#777", boxShadow: "0 0 0 #fff0" },
-    { borderColor: "#fff", boxShadow: "0 0 12px #fff5" }
-  ], { duration: 1200, iterations: 3 }));
+    { borderColor: "#fff", boxShadow: "inset 0 0 0 2px #fff, 0 0 18px #fffb" },
+    { borderColor: "#536c72", boxShadow: "inset 0 0 0 0 #fff0, 0 0 0 #fff0" },
+    { borderColor: "#fff", boxShadow: "inset 0 0 0 2px #fff, 0 0 18px #fffb" }
+  ], { duration: 900, iterations: 4, easing: "ease-in-out" }));
   el.querySelectorAll(".score-change").forEach(node => node.animate([
     { transform: "translateY(-8px)", opacity: 0 },
     { transform: "translateY(0)", opacity: 1 }

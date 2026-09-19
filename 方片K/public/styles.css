@@ -342,7 +342,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
 .settlement-player { display: flex; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 14px; }
 .settlement-player > :first-child { min-width: 0; }
 .settlement-points { text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.round-winner { border-color: #fff; }
+.round-winner { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; }
 .winner-label { display: inline-block; color: #fff; font-size: 12px; margin-left: 8px; }
 .player .winner-label { margin: 0; }
 .score-change { display: inline-block; color: var(--red); }
@@ -390,8 +390,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
   .board-equation div > span { font-size: 10px; }
   .board-equation strong { font-size: 21px; border-width: 1px; }
   .board-operator { font-size: 20px; }
-  #announcement .settlement-players { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
-  #announcement .settlement-player { padding: 7px 5px; gap: 3px; line-height: 1.4; }
+  #announcement .settlement-players { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  #announcement .settlement-player { flex: 0 0 calc((100% - 16px) / 3); padding: 7px 5px; gap: 3px; line-height: 1.4; }
   #announcement .settlement-points { padding-top: 6px; }
   .board-seat { font-size: 26px; margin: 0 4px 3px; padding: 2px 0; }
   .board-name { font-size: 12px; }
@@ -401,7 +401,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
   #announcement[data-phase="rules"] #announcementRules { min-height: 300px; padding: 24px 4px; }
 }
 @media (max-width: 360px) {
-  #announcement .settlement-players { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #announcement .settlement-player { flex-basis: calc((100% - 8px) / 2); }
   .board-equation strong { font-size: 17px; }
 }
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
