@@ -313,22 +313,24 @@ button:disabled {
 }
 
 dialog {
-  width: min(560px, calc(100vw - 32px));
+  width: min(1000px, calc(100vw - 24px));
   box-sizing: border-box;
-  border: 1px solid #612b2b;
-  border-top: 4px solid var(--accent-fill);
+  border: 1px solid #799b9a;
+  border-top: 3px solid #b8d5c5;
   padding: clamp(18px, 4vw, 28px);
-  background: var(--panel);
-  color: var(--text);
+  background-color: #07151e;
+  background-image: radial-gradient(circle, #9cb6b32e 1px, transparent 1px), linear-gradient(#142c3244 1px, transparent 1px), linear-gradient(90deg, #142c3244 1px, transparent 1px);
+  background-size: 8px 8px, 40px 40px, 40px 40px;
+  color: #d3e8cf;
   line-height: 1.8;
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
-  border-radius: 8px;
+  border-radius: 2px;
   box-shadow: 0 24px 100px #0009;
 }
 dialog::backdrop { background: rgba(0, 0, 0, .82); }
-#announcementTitle { color: var(--accent); border-bottom: 1px solid var(--line); padding-bottom: 14px; }
-#announcementCountdown { color: var(--muted); margin-bottom: 0; border-top: 1px solid var(--line); padding-top: 14px; font-size: 13px; }
+#announcementTitle { color: #d3e8cf; border-bottom: 1px solid #a8c5bf55; padding-bottom: 14px; text-align: center; letter-spacing: .1em; }
+#announcementCountdown { color: #b0c5c4; margin-bottom: 0; border-top: 1px solid #a8c5bf55; padding-top: 14px; font-size: 13px; text-align: center; }
 #announcementEliminated:not(:empty) { background: #55171755; border-left: 3px solid var(--red); padding: 10px 14px; }
 #eliminationPanel { border-color: var(--red); margin-bottom: 16px; }
 #demoPanel { margin-bottom: 16px; }
@@ -344,6 +346,64 @@ dialog::backdrop { background: rgba(0, 0, 0, .82); }
 .winner-label { display: inline-block; color: #fff; font-size: 12px; margin-left: 8px; }
 .player .winner-label { margin: 0; }
 .score-change { display: inline-block; color: var(--red); }
+.board-balance { position: absolute; left: 10%; top: 0; width: 80%; height: 100%; opacity: .12; pointer-events: none; color: #c4e3d6; }
+#announcement > :not(.board-balance) { position: relative; }
+#announcement .muted { color: #b0c5c4; }
+#announcement .ok { color: #d3e8cf; text-align: center; }
+.board-selections { display: flex; justify-content: center; gap: clamp(6px, 2vw, 20px); border: 1px solid #d54a43; padding: 10px; margin-bottom: 20px; }
+.board-selections > div { flex: 1; min-width: 0; max-width: 130px; text-align: center; }
+.board-selections span { display: block; font-size: 12px; margin-bottom: 4px; }
+.board-selections strong { display: block; background: #cee4ce; color: #0a181d; border: 3px double #172f34; font-size: clamp(20px, 4vw, 34px); font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.board-equation { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,.6fr) auto minmax(0,1.3fr); align-items: center; gap: 12px; max-width: 760px; margin: 0 auto 20px; text-align: center; }
+.board-equation div > span { display: block; font-size: 13px; margin-bottom: 4px; }
+.board-equation strong { display: block; font-size: clamp(22px, 4vw, 42px); font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.board-average strong, .board-target strong { background: #cee4ce; color: #0a181d; border: 3px double #254047; }
+.board-target strong { font-weight: 700; outline: 1px solid #cee4ce; outline-offset: 3px; }
+.board-factor strong { color: #ff6358; }
+.board-operator { font-size: 30px; padding-top: 20px; }
+.board-note { color: #b0c5c4; font-size: 13px; text-align: center; }
+#announcement .settlement-players { grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); gap: 12px; }
+#announcement .settlement-player { display: flex; flex-direction: column; justify-content: flex-start; gap: 4px; padding: 12px 8px; background: #07151ed9; border-color: #77938d; border-radius: 0; text-align: center; min-width: 0; }
+#announcement .settlement-player.round-winner { border-color: #fff; }
+.board-outcome { font-size: 11px; min-height: 20px; color: #b0c5c4; }
+.round-winner .board-outcome { color: #fff; font-weight: 700; }
+.board-seat { font: 46px/1.25 Georgia, serif; border: 1px solid #77938d66; margin: 0 10px 6px; padding: 8px 0; }
+.board-name { font-size: 14px; }
+.board-choice { color: #b0c5c4; font-size: 12px; }
+#announcement .settlement-points { text-align: center; margin-top: auto; padding-top: 10px; border-top: 1px solid #77938d66; }
+.board-total { white-space: nowrap; }
+.board-total > span { font-size: 13px; color: #b0c5c4; }
+.board-total strong { font-size: 32px; line-height: 1.4; }
+.settlement-points small { color: #b0c5c4; font-size: 10px; }
+#announcementRules { padding: 0; margin: 0; list-style-position: inside; }
+#announcementRules:empty { display: none; }
+#announcement[data-phase="rules"] { min-height: min(580px, calc(100dvh - 32px)); }
+#announcement[data-phase="rules"] #announcementTitle { font-size: clamp(24px, 4vw, 36px); margin-bottom: 0; }
+#announcement[data-phase="rules"] #announcementRules { display: flex; flex-direction: column; justify-content: center; gap: 24px; min-height: 340px; padding: 30px 16px; text-align: center; font-size: clamp(20px, 3vw, 30px); line-height: 1.9; font-weight: 600; }
+#announcement[data-phase="victory"] #announcementScore { text-align: center; padding: 60px 0; font-size: 24px; }
+@media (max-width: 600px) {
+  #announcement { padding: 14px; }
+  .board-selections { padding: 6px; gap: 5px; margin-bottom: 14px; }
+  .board-selections span { font-size: 10px; }
+  .board-selections strong { font-size: 20px; border-width: 1px; }
+  .board-equation { gap: 6px; margin-bottom: 14px; }
+  .board-equation div > span { font-size: 10px; }
+  .board-equation strong { font-size: 21px; border-width: 1px; }
+  .board-operator { font-size: 20px; }
+  #announcement .settlement-players { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+  #announcement .settlement-player { padding: 7px 5px; gap: 3px; line-height: 1.4; }
+  #announcement .settlement-points { padding-top: 6px; }
+  .board-seat { font-size: 26px; margin: 0 4px 3px; padding: 2px 0; }
+  .board-name { font-size: 12px; }
+  .board-outcome { font-size: 9px; min-height: 15px; }
+  .board-total strong { font-size: 26px; }
+  .board-total > span { font-size: 11px; }
+  #announcement[data-phase="rules"] #announcementRules { min-height: 300px; padding: 24px 4px; }
+}
+@media (max-width: 360px) {
+  #announcement .settlement-players { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .board-equation strong { font-size: 17px; }
+}
 @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 
 /* Playing-card cover; game screens keep their existing layout. */

@@ -26,6 +26,8 @@ function showAnnouncement(state) {
   const key = `${code}:${state.round}:${scoring ? "score" : victory ? "victory" : "rules"}`;
   if (key !== announcementKey) {
     announcementKey = key;
+    announcement.dataset.phase = scoring ? "score" : victory ? "victory" : "rules";
+    announcement.scrollTop = 0;
     setText("#announcementTitle", scoring ? `第 ${state.round} 轮 · 记分播报` : victory ? "游戏结束 · 胜利播报" : "追加规则公布");
     const eliminated = state.result.eliminated || [];
     setText("#announcementEliminated", scoring && eliminated.length ? `本轮淘汰：${eliminated.map(p => `${p.seat} 号 ${p.name}（${p.score} 分）`).join("、")}` : "");
@@ -39,13 +41,15 @@ function showAnnouncement(state) {
       const r = state.result;
       const label = p => `${p.seat} 号 ${escapeHtml(p.name)}`;
       const winners = r.winners.map(label).join("、");
-      score.innerHTML = `${settlementTarget(r)}
+      score.innerHTML = `<div class="board-selections" aria-label="各玩家选数">${r.values.map(p => `<div><span>${p.seat} 号</span><strong>${p.value ?? "超时"}</strong></div>`).join("")}</div>
+        <div class="board-equation" aria-label="平均数乘以零点八得到结算目标值"><div class="board-average"><span>平均数</span><strong>${r.average ?? "无"}</strong></div><span class="board-operator">×</span><div class="board-factor"><span>常数</span><strong>0.8</strong></div><span class="board-operator">=</span><div class="board-target"><span>结算目标值</span><strong>${r.target ?? "无"}</strong></div></div>
         <p class="ok">${winners ? `${winners}${r.specialRule ? "触发 0／100 特例" : "最接近目标值"}，本轮获胜。` : "本轮无人获胜。"}</p>
+        ${r.exactHit ? '<p class="board-note">获胜者命中四舍五入后的目标，已提交失败者扣 2 分。</p>' : ''}
         <div class="settlement-players">${r.values.map(p => {
           const deduction = r.losses.find(loss => loss.seat === p.seat)?.deduction || 0;
           const total = state.players.find(player => player.seat === p.seat).score;
           const won = r.winners.some(winner => winner.seat === p.seat);
-          return `<div class="settlement-player ${won ? "round-winner" : ""}"><div><strong>${label(p)}</strong>${won ? '<span class="winner-label">本轮获胜</span>' : ''}<br><span class="muted">${p.value === null ? "超时未提交" : `选择 ${p.value}`}</span></div><div class="settlement-points"><span class="${deduction ? "danger" : "muted"}">扣 ${deduction} 分</span><br><span class="muted">${total + deduction} → </span><strong class="${deduction ? "score-change" : ""}">${total} 分</strong></div></div>`;
+          return `<div class="settlement-player ${won ? "round-winner" : ""}"><span class="board-outcome">${won ? "WIN · 本轮获胜" : total <= -10 ? "OUT · 已淘汰" : "本轮扣分"}</span><div class="board-seat" aria-label="${p.seat} 号玩家">${String(p.seat).padStart(2, "0")}</div><strong class="board-name">${escapeHtml(p.name)}</strong><span class="board-choice">${p.value === null ? "超时未提交" : `选择 ${p.value}`}</span><div class="settlement-points"><span class="${deduction ? "danger" : "muted"}">扣 ${deduction} 分</span><div class="board-total"><span>${total + deduction} → </span><strong class="${deduction ? "score-change" : ""}">${total}</strong></div><small>累计积分</small></div></div>`;
         }).join("")}</div>
         ${r.duplicated.length ? `<p>重复失效数字：${r.duplicated.join("、")}</p>` : ""}
         ${r.finalWinner ? `<p class="ok">${label(r.finalWinner)} 获得最终胜利。</p>` : r.allEliminated ? "<p>全员淘汰，本局无最终胜者。</p>" : ""}`;
