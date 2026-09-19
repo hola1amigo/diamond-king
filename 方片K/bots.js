@@ -1,12 +1,13 @@
 const { evaluateRound } = require("./round");
 
 const BOT_PROFILES = [
-  { name: "砺石", style: "稳健", memory: 8, trend: .25, depth: .1, risk: 1.2 },
-  { name: "逐流", style: "趋势", memory: 4, trend: .9, depth: .2, risk: .7 },
-  { name: "算子", style: "推演", memory: 6, trend: .5, depth: .65, risk: .9 },
-  { name: "逆锋", style: "反向", memory: 5, trend: -.4, depth: .35, risk: .4 }
+  { name: "砺石", style: "稳健", memory: 12, prior: 40, risk: 2, collision: .12, pressure: .04, weights: [3,1,1,1,1] },
+  { name: "逐流", style: "趋势", memory: 8, prior: 32, risk: 1, collision: .08, pressure: .08, weights: [1,2,3,1,1] },
+  { name: "算子", style: "推演", memory: 12, prior: 26, risk: 1.5, collision: .16, pressure: .1, weights: [1,1,1,3,2] },
+  { name: "逆锋", style: "反向", memory: 10, prior: 46, risk: .6, collision: .4, pressure: .16, weights: [1,1,1,2,3] }
 ];
 const clamp = value => Math.max(0, Math.min(100, Math.round(value)));
+const median = values => { const sorted = [...values].sort((a,b) => a-b); return sorted[Math.floor(sorted.length / 2)]; };
 
 // Input contains public scores and completed rounds only. No room, tokens,
 // current submissions, other bots' plans or cross-game memory are accessible.
@@ -15,26 +16,48 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
   const records = history.slice(-style.memory);
   const opponents = players.filter(p => p.seat !== seat);
   const models = opponents.map(opponent => {
-    const series = records.map(r => ({ value: r.values.find(p => p.seat === opponent.seat)?.value, target: r.target }))
-      .filter(r => Number.isInteger(r.value));
-    if (!series.length) return { mean: 38 - style.depth * 12, spread: 18, series };
-    // Compare persistence, trend-following and target-following predictions
-    // against this opponent's actual previous choices, favouring recent rounds.
+    // Keep missing rounds in place: a timeout must not become an alternating turn.
+    const series = records.map(r => r.values.find(p => p.seat === opponent.seat)?.value ?? null);
+    if (!series.some(Number.isInteger)) return { forecasts: [{value: style.prior, weight: 1, error: 16}], total: 1, noise: 1 };
+    // Forecast each seat separately. Test each hypothesis on earlier rounds,
+    // rather than treating the previous table target as everybody's next choice.
     const predict = (i, model) => {
-      const last = series[i - 1];
-      if (model === 0) return last.value;
-      if (model === 1) return clamp(last.value + style.trend * (last.value - (series[i - 2]?.value ?? last.value)));
-      return clamp((last.target ?? last.value) * (1 - .2 * style.depth));
+      const observed = series.slice(0, i).filter(Number.isInteger);
+      if (!observed.length) return style.prior;
+      const last = observed.at(-1);
+      const center = median(observed.slice(-5));
+      if (model === 0) return center;
+      if (model === 1) return last;
+      if (model === 2) return clamp(last + Math.max(-15, Math.min(15, last - (observed.at(-2) ?? last))));
+      if (model === 3) return series[i - 2] ?? center;
+      // Find past responses to a similar public table target.
+      const target = records[i - 1]?.target;
+      if (target === null || target === undefined) return center;
+      const matches = [];
+      for (let j = 1; j < i; j++) if (Number.isInteger(series[j]) && records[j - 1].target !== null) {
+        matches.push({ distance: Math.abs(records[j - 1].target - target), value: series[j] });
+      }
+      matches.sort((a,b) => a.distance-b.distance);
+      return matches.length ? median(matches.slice(0,3).map(p=>p.value)) : center;
     };
-    const errors = [0, 1, 2].map(model => {
+    const observed = series.filter(Number.isInteger);
+    const previous = observed.slice(0,-1);
+    const center = previous.length ? median(previous) : observed[0];
+    const deviation = previous.length ? median(previous.map(v=>Math.abs(v-center))) : 0;
+    const isolatedJump = previous.length >= 3 && Math.abs(observed.at(-1)-center) > Math.max(20, deviation * 3);
+    const forecasts = style.weights.map((prior, model) => {
       let sum = 0, weight = 0;
-      for (let i = 1; i < series.length; i++) { sum += i * Math.abs(series[i].value - predict(i, model)); weight += i; }
-      return weight ? sum / weight : 8;
+      for (let i = 1; i < series.length; i++) if (Number.isInteger(series[i])) {
+        const w = i + 1;
+        sum += w * Math.abs(series[i] - predict(i, model)); weight += w;
+      }
+      const error = weight ? sum / weight : 8;
+      // One shock is weak evidence of a permanent switch. Repeated high choices
+      // move the median and restore support without a special human-player rule.
+      const shockDiscount = isolatedJump && (model === 1 || model === 2) ? .08 : 1;
+      return { value: predict(series.length,model), error, weight: prior * shockDiscount / (2 + error) ** 2 };
     });
-    const weights = errors.map(error => 1 / (3 + error));
-    const total = weights.reduce((a, b) => a + b, 0);
-    const mean = weights.reduce((s, w, model) => s + w * predict(series.length, model), 0) / total;
-    return { mean, spread: Math.max(2, Math.min(20, Math.min(...errors) + 3)), series };
+    return { forecasts, total: forecasts.reduce((sum,p)=>sum+p.weight,0), noise: .2 };
   });
   const scores = Array(101).fill(0);
   const self = players.find(p => p.seat === seat);
@@ -42,10 +65,13 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
   for (let sample = 0; sample < 72; sample++) {
     const predicted = opponents.map((p, i) => {
       const model = models[i];
-      // Empirical samples retain repeated values (especially 0/100 in a duel).
-      const empirical = model.series.length && random() < .35;
-      const value = empirical ? model.series[Math.floor(random() * model.series.length)].value
-        : clamp(model.mean + (random() + random() + random() - 1.5) * model.spread);
+      let pick = random() * model.total;
+      const forecast = model.forecasts.find(f => (pick -= f.weight) <= 0) || model.forecasts.at(-1);
+      // Exact hypotheses retain collision probability and 0/100 counterplay.
+      // Averaging incompatible modes would invent numbers the opponent never uses.
+      const value = random() < model.noise
+        ? clamp(forecast.value + (random() + random() + random() - 1.5) * Math.max(2, Math.min(20, forecast.error)))
+        : forecast.value;
       return { seat: p.seat, value };
     });
     for (let value = 0; value <= 100; value++) {
@@ -54,8 +80,12 @@ function chooseBotNumber({ seat, profile, players, history, stage }, random = Ma
       const winning = outcome.winners.some(p => p.seat === seat);
       const eliminated = self.score - ownLoss <= -10;
       const rivalsOut = opponents.filter(p => p.score - outcome.losses.find(loss => loss.seat === p.seat).deduction <= -10).length;
+      const leader = Math.max(...players.map(p=>p.score));
+      const leaderLoss = opponents.filter(p=>p.score===leader).reduce((sum,p)=>sum+outcome.losses.find(loss=>loss.seat===p.seat).deduction,0);
+      const collision = stage >= 1 && predicted.some(p=>p.value===value);
       scores[value] += -ownLoss + (winning ? .25 : 0) - (eliminated ? 1 + style.risk : 0) + rivalsOut * .15
-        - .003 * Math.abs(value - outcome.target);
+        + (self.score > -8 ? style.pressure * leaderLoss : 0) - (collision ? style.collision : 0)
+        - .001 * Math.abs(value - outcome.target);
     }
   }
   const best = Math.max(...scores);

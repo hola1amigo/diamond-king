@@ -351,3 +351,23 @@ test("rules can be dismissed per player after scoring without skipping other pla
   assert.equal(g.room.phase,"playing");
   assert.equal((await g.request(1)).body.me.rulesDismissed,false);
 });
+test("bots resist isolated spikes, recognise alternating choices and avoid invalid duplicates", () => {
+  const rng = () => { let seed=123; return () => ((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296); };
+  const players=[1,2,3,4,5].map(seat=>({seat,score:0}));
+  const history = (sequence, all=false) => sequence.map(value=>{
+    const values=players.map(p=>({seat:p.seat,value:all || p.seat===1 ? value : 10}));
+    return {values,target:values.reduce((s,p)=>s+p.value,0)/5*.8};
+  });
+  for(let profile=0;profile<4;profile++) {
+    const choose=(records,active=players,stage=0)=>chooseBotNumber({seat:2,profile,players:active,history:records,stage},rng());
+    const baseline=choose(history(Array(8).fill(10)));
+    const shock=choose(history([10,10,10,10,10,10,10,100]));
+    const sustained=choose(history([10,10,10,100,100,100,100,100]));
+    assert.ok(Math.abs(shock-baseline)<=3,"one spike must not reset the whole forecast");
+    assert.ok(sustained>shock+10,"persistent changes still update the forecast");
+    const nextLow=choose(history([10,70,10,70,10,70,10,70],true));
+    const nextHigh=choose(history([70,10,70,10,70,10,70,10],true));
+    assert.ok(nextHigh>nextLow+25,"predict the next alternating mode instead of their average");
+    assert.equal(choose(history(Array(8).fill(0),true),players.slice(0,4),1),1,"avoid repeated zero after duplicate rule unlocks");
+  }
+});
