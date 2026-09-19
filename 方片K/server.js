@@ -185,10 +185,10 @@ function createGameServer({ now = Date.now } = {}) {
       if (url.pathname.startsWith("/api/")) return sendJson(res, 404, { error: "接口不存在" });
       if (req.method !== "GET") { res.writeHead(405); return res.end(); }
       const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
-      if (!["index.html", "player.html", "app.js", "player.js", "lobby.js", "styles.css", "background.png"].includes(file)) { res.writeHead(404); return res.end("Not found"); }
+      if (!["index.html", "player.html", "app.js", "player.js", "lobby.js", "styles.css", "background.png", "king-card.jpg"].includes(file)) { res.writeHead(404); return res.end("Not found"); }
       const data = await fs.promises.readFile(path.join(PUBLIC_DIR, file));
-      const type = file.endsWith(".png") ? "image/png" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
-      res.writeHead(200, { "content-type": type === "image/png" ? type : `${type}; charset=utf-8`, "cache-control": "no-store", "referrer-policy": "no-referrer" });
+      const type = file.endsWith(".jpg") ? "image/jpeg" : file.endsWith(".png") ? "image/png" : file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html";
+      res.writeHead(200, { "content-type": type.startsWith("image/") ? type : `${type}; charset=utf-8`, "cache-control": "no-store", "referrer-policy": "no-referrer" });
       res.end(data);
     } catch (error) { sendJson(res, error.status || 500, { error: error.status ? error.message : "服务器错误" }); }
   });

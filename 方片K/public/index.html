@@ -6,20 +6,32 @@
   <title>方片 K 五人网络版</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
-  <main class="app narrow">
-    <header><div><p class="eyebrow">ALICE IN BORDERLAND · 弥留之国的爱丽丝</p><h1><span class="suit" aria-hidden="true">♦</span> 方片 K</h1><p class="subtitle">理性之间，只留一位胜者。</p><div class="game-tags"><span>五人对局</span><span>私密选数</span><span>限时博弈</span></div></div></header>
-    <section class="panel stack">
-      <h2>加入游戏</h2>
-      <p class="muted">输入昵称，自动入座。五人全部准备后开始。</p>
-      <form id="joinForm" class="stack">
-        <label for="nickname">你的昵称</label>
-        <input id="nickname" maxlength="16" required autocomplete="nickname" placeholder="输入你的玩家昵称">
-        <button class="primary" id="joinBtn" type="submit">加入游戏</button>
-      <button id="demoBtn" type="submit" formnovalidate>单人流程演示（无需凑人）</button></form>
-      <p class="muted">朋友们打开同一个网址即可。房间满员后，新玩家会进入下一个房间；同一浏览器会恢复原座位。</p>
-      <p id="status" aria-live="polite"></p>
-    </section>
+<body class="landing">
+  <main class="entry-shell">
+    <header class="entry-header"><a class="entry-brand" href="/">ALICE IN BORDERLAND<span>弥留之国的爱丽丝</span></a><span class="entry-edition">智力游戏 <span aria-hidden="true">♦</span></span></header>
+    <div class="entry-scene">
+      <figure class="entry-art">
+        <div class="entry-card"><img src="/king-card.jpg" width="702" height="1071" alt="红黑漫画半调网点风格的方片 K 扑克牌" fetchpriority="high"></div>
+        <figcaption>KING OF DIAMONDS <span>♦</span> 知性与心理的博弈</figcaption>
+      </figure>
+      <section class="entry-intro" aria-labelledby="game-title">
+        <p class="eyebrow">KING OF DIAMONDS</p>
+        <h1 id="game-title">方片 <span>K</span><i aria-hidden="true">♦</i></h1>
+        <p class="entry-tagline">理性之间，<br>只留一位胜者。</p>
+        <div class="entry-facts"><span><b>05</b> 位玩家</span><span>私密选数</span><span>限时博弈</span></div>
+      </section>
+      <section class="entry-register" aria-labelledby="entry-title">
+        <div class="entry-register-heading"><h2 id="entry-title">入局登记</h2><span>TAKE YOUR SEAT</span></div>
+        <form id="joinForm">
+          <label for="nickname">你的昵称</label>
+          <div class="entry-input-row"><input id="nickname" maxlength="16" required autocomplete="nickname" placeholder="以什么名字入局？"><button class="primary" id="joinBtn" type="submit">加入游戏 <span aria-hidden="true">↗</span></button></div>
+          <p class="entry-hint">自动分配房间 · 五人全部准备后开始</p>
+          <button id="demoBtn" type="submit" formnovalidate>先独自体验一局 <span aria-hidden="true">→</span></button>
+        </form>
+        <p id="status" aria-live="polite"></p>
+      </section>
+    </div>
+    <footer class="entry-footer"><span>同一网址，一起入局。</span><p>房间满员后自动分配下一间；同一浏览器可恢复原座位。</p></footer>
   </main>
   <script src="/app.js"></script>
   <script src="/lobby.js"></script>
