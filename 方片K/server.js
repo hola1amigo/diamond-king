@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const os = require("os");
 const path = require("path");
 const fs = require("fs");
+const { evaluateRound } = require("./round");
+const { BOT_PROFILES, chooseBotNumber } = require("./bots");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_RULES = [
@@ -31,8 +33,8 @@ function createGameServer({ now = Date.now } = {}) {
   }
   function state(room, me) {
     const hideNewRules = room.result && now() < room.scoreAnnouncementUntil;
-    const view = (p) => ({ ...identity(p), joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
-    return { code: room.code, demo: Boolean(room.demo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
+    const view = (p) => ({ ...identity(p), bot: p.bot === undefined ? null : BOT_PROFILES[p.bot].style, joined: Boolean(p.token), score: p.score, submitted: p.submitted, eliminated: p.eliminated, ready: p.ready });
+    return { code: room.code, demo: Boolean(room.demo), solo: Boolean(room.solo), announcementUntil: room.announcementUntil || null, scoreAnnouncementUntil: room.scoreAnnouncementUntil || null, round: room.round, phase: room.phase, serverNow: now(), deadline: room.deadline,
       activeCount: room.players.filter(p => !p.eliminated).length,
       me: me ? { ...view(me), value: me.value } : null, players: room.players.map(view),
       visibleRules: [...BASE_RULES, ...EXTRA_RULES.slice(0, hideNewRules ? room.stage - room.newRules.length : room.stage)], newRules: hideNewRules ? [] : room.newRules,
@@ -45,27 +47,20 @@ function createGameServer({ now = Date.now } = {}) {
     room.result = null;
     room.newRules = [];
     for (const p of room.players) { p.ready = false; p.submitted = false; p.value = null; }
+    if (room.solo) {
+      const players = room.players.filter(p => !p.eliminated).map(p => ({ seat: p.seat, score: p.score }));
+      for (const p of room.players.filter(p => p.bot !== undefined && !p.eliminated)) {
+        p.plan = { value: chooseBotNumber({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage }), submitAt: now() + crypto.randomInt(2000, 6001) };
+      }
+    }
   }
   function settle(room) {
     if (room.phase !== "playing") return;
     const active = room.players.filter(p => !p.eliminated);
     if (now() < room.deadline && active.some(p => !p.submitted)) return;
-    const submitted = active.filter(p => p.submitted);
-    // Integer hundredths keep exact hits and equal distances deterministic.
-    const sum = submitted.reduce((s, p) => s + Math.round(p.value * 100), 0);
-    const n = submitted.length;
-    const average = n ? sum / (100 * n) : null;
-    const target = n ? average * 0.8 : null;
-    const counts = new Map();
-    submitted.forEach(p => counts.set(p.value, (counts.get(p.value) || 0) + 1));
-    const duplicated = room.stage >= 1 ? [...counts].filter(([, count]) => count > 1).map(([v]) => v) : [];
-    const valid = submitted.filter(p => !duplicated.includes(p.value));
-    const special = active.length === 2 && submitted.some(p => p.value === 0) && submitted.find(p => p.value === 100);
-    const distance = p => Math.abs(Math.round(p.value * 100) * 5 * n - sum * 4);
-    const closest = Math.min(...valid.map(distance));
-    const winners = special ? [special] : valid.filter(p => distance(p) === closest);
-    const exactHit = room.stage >= 2 && winners.some(p => p.value === Math.round(target));
-    const penalty = exactHit ? 2 : 1;
+    const outcome = evaluateRound(active.map(p => ({ seat: p.seat, value: p.submitted ? p.value : null })), room.stage);
+    const { average, target, duplicated, exactHit, penalty, specialRule } = outcome;
+    const winners = active.filter(p => outcome.winners.some(winner => winner.seat === p.seat));
     const losses = active.map(p => {
       const deduction = !p.submitted ? 1 : winners.includes(p) ? 0 : penalty;
       p.score -= deduction;
@@ -85,12 +80,34 @@ function createGameServer({ now = Date.now } = {}) {
     room.deadline = null;
     room.result = { round: room.round, average: average === null ? null : Number(average.toFixed(4)), target: target === null ? null : Number(target.toFixed(4)),
       values: active.map(p => ({ ...identity(p), value: p.value })), winners: winners.map(identity), duplicated,
-      penalty, exactHit, specialRule: Boolean(special), losses, eliminated, finalWinner: remaining.length === 1 ? identity(remaining[0]) : null, allEliminated: remaining.length === 0 };
+      penalty, exactHit, specialRule, losses, eliminated, finalWinner: remaining.length === 1 ? identity(remaining[0]) : null, allEliminated: remaining.length === 0 };
+    if (room.solo) {
+      room.botHistory.push({ target, values: room.result.values.map(p => ({ seat: p.seat, value: p.value })) });
+      room.botHistory = room.botHistory.slice(-12);
+      for (const p of room.players) delete p.plan;
+    }
     room.history.unshift(`第 ${room.round} 轮：目标 ${room.result.target ?? "无"}，胜者 ${winners.map(p => p.name).join("、") || "无"}。`);
     room.history = room.history.slice(0, 12);
   }
+  function advance(room) {
+    if (room.solo) {
+      if (room.phase === "result" && now() >= room.announcementUntil) {
+        for (const p of room.players) if (p.bot !== undefined && !p.eliminated) p.ready = true;
+        if (room.players[0].eliminated) begin(room);
+      }
+      if (room.phase === "playing") {
+        for (const p of room.players) {
+          if (!p.eliminated && !p.submitted && p.plan && now() >= p.plan.submitAt) {
+            p.value = p.plan.value;
+            p.submitted = true;
+          }
+        }
+      }
+    }
+    settle(room);
+  }
   function releaseIdleSeats(room) {
-    if (room.demo) return;
+    if (room.demo || room.solo) return;
     if (room.phase !== "lobby") return;
     for (const p of room.players) {
       if (p.token && now() - p.lastSeen >= 120000) {
@@ -104,31 +121,35 @@ function createGameServer({ now = Date.now } = {}) {
     try {
       const url = new URL(req.url, "http://localhost");
       if (req.method === "GET" && url.pathname === "/health") return sendJson(res, 200, { ok: true });
-      if (req.method === "POST" && ["/api/match", "/api/demo"].includes(url.pathname)) {
+      if (req.method === "POST" && ["/api/match", "/api/demo", "/api/solo"].includes(url.pathname)) {
         const body = await readBody(req);
         const token = (req.headers.authorization || "").replace(/^Bearer /, "");
         if (!/^[a-f0-9]{48}$/.test(token)) return sendJson(res, 400, { error: "浏览器身份无效，请返回首页重新加入。" });
         if (typeof body.name !== "string" || !body.name.trim()) return sendJson(res, 400, { error: "请输入昵称" });
         const demo = url.pathname === "/api/demo";
+        const solo = url.pathname === "/api/solo";
         for (const room of rooms.values()) {
-          if (Boolean(room.demo) !== demo) continue;
+          if (Boolean(room.demo) !== demo || Boolean(room.solo) !== solo) continue;
           releaseIdleSeats(room);
-          settle(room);
+          advance(room);
           const me = room.players.find(p => p.token === token);
           if (me && room.phase !== "finished") {
             me.lastSeen = now();
             return sendJson(res, 200, state(room, me));
           }
         }
-        const room = (!demo && [...rooms.values()].find(r => !r.demo && r.phase === "lobby" && r.players.some(p => !p.token))) || createRoom();
+        const room = (!demo && !solo && [...rooms.values()].find(r => !r.demo && !r.solo && r.phase === "lobby" && r.players.some(p => !p.token))) || createRoom();
         room.demo = demo;
+        room.solo = solo;
+        if (solo) room.botHistory = [];
         const me = room.players.find(p => !p.token);
         me.token = token;
         me.name = body.name.trim().slice(0, 16);
         me.lastSeen = now();
-        if (demo) for (const p of room.players.slice(1)) {
+        if (demo || solo) for (const p of room.players.slice(1)) {
           p.token = crypto.randomBytes(24).toString("hex");
-          p.name = `模拟玩家 ${p.seat}`;
+          p.name = solo ? BOT_PROFILES[p.seat - 2].name : `模拟玩家 ${p.seat}`;
+          if (solo) { p.bot = p.seat - 2; p.ready = true; }
         }
         return sendJson(res, 201, state(room, me));
       }
@@ -141,14 +162,14 @@ function createGameServer({ now = Date.now } = {}) {
         const me = room.players.find(p => p.token === token);
         if (!me) return sendJson(res, 403, { error: "座位已失效，请返回首页重新加入。" });
         me.lastSeen = now();
-        settle(room);
+        advance(room);
         const action = match[2];
         if (req.method === "GET" && !action) return sendJson(res, 200, state(room, me));
         if (req.method !== "POST" || !["join", "ready", "submit", "demo_step"].includes(action)) return sendJson(res, 404, { error: "操作不存在" });
         const body = await readBody(req);
         // Recheck after awaiting the request body: the deadline or round may have changed.
         if (me.token !== token) return sendJson(res, 403, { error: "座位已失效，请返回首页重新加入。" });
-        settle(room);
+        advance(room);
         if (action === "demo_step") {
           if (!room.demo || me.seat !== 1 || body.round !== room.round || !["lobby", "result"].includes(room.phase) || now() < room.announcementUntil) return sendJson(res, 409, { error: "当前不能推进演示，请等待播报结束。" });
           begin(room);
@@ -192,7 +213,7 @@ function createGameServer({ now = Date.now } = {}) {
       res.end(data);
     } catch (error) { sendJson(res, error.status || 500, { error: error.status ? error.message : "服务器错误" }); }
   });
-  const timer = setInterval(() => { for (const room of rooms.values()) settle(room); }, 250);
+  const timer = setInterval(() => { for (const room of rooms.values()) advance(room); }, 250);
   timer.unref();
   server.on("close", () => clearInterval(timer));
   return { server, rooms, settle };

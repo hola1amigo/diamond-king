@@ -2,6 +2,8 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { createGameServer } = require("./server");
 const crypto = require("crypto");
+const { chooseBotNumber, BOT_PROFILES } = require("./bots");
+const { evaluateRound } = require("./round");
 
 async function setup(t) {
   let time = 1000000;
@@ -246,6 +248,85 @@ test("solo demo is isolated and unlocks rules with a mandatory 12-second announc
     }
   }
   assert.equal((await g.request(1, 'demo_step', { round: 0 })).status, 409);
+});
+
+test("bot forecasts adapt to public history, obey late rules and are seed-reproducible", () => {
+  const rng = () => { let seed = 12345; return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296); };
+  const players = [1, 2, 3, 4, 5].map(seat => ({ seat, score: 0 }));
+  const history = value => Array.from({ length: 8 }, () => ({ target: value * .8, values: players.map(p => ({ seat: p.seat, value })) }));
+  for (let profile = 0; profile < 4; profile++) {
+    const input = { seat: 2, profile, players, history: history(10), stage: 0 };
+    const original = JSON.stringify(input);
+    const low = chooseBotNumber(input, rng());
+    const high = chooseBotNumber({ ...input, history: history(70) }, rng());
+    assert.ok(Number.isInteger(low) && low >= 0 && high <= 100);
+    assert.ok(high > low + 20, `${BOT_PROFILES[profile].name} must adapt to observed choices`);
+    assert.equal(chooseBotNumber(input, rng()), low);
+    assert.equal(JSON.stringify(input), original);
+    const duel = { ...input, players: players.slice(0, 2), stage: 3,
+      history: Array.from({ length: 8 }, () => ({ target: 0, values: [{ seat: 1, value: 0 }, { seat: 2, value: 0 }] })) };
+    assert.equal(chooseBotNumber(duel, rng()), 100, "recognises the zero / hundred counterplay");
+  }
+  assert.deepEqual(evaluateRound([{seat:1,value:10},{seat:2,value:10},{seat:3,value:20}],2).winners.map(p=>p.seat), [3]);
+});
+
+test("solo challenge commits private bot choices before human input and completes without preset scores", async t => {
+  const g = await setup(t);
+  const headers = { 'content-type': 'application/json', Authorization: `Bearer ${g.tokens[0]}` };
+  const create = () => fetch(`${g.base}/api/solo`, { method: 'POST', headers, body: JSON.stringify({ name: '挑战者' }) }).then(r=>r.json());
+  let s = await create();
+  const room = g.rooms.get(s.code);
+  const request = async (action = '', body) => {
+    const r = await fetch(`${g.base}/api/rooms/${room.code}${action ? '/' + action : ''}`, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined });
+    return { status: r.status, body: await r.json() };
+  };
+  assert.equal(s.solo, true);
+  assert.equal(s.demo, false);
+  assert.ok(s.players.every(p => p.score === 0));
+  assert.deepEqual(s.players.slice(1).map(p=>p.bot), BOT_PROFILES.map(p=>p.style));
+  assert.equal((await create()).code, room.code);
+  assert.notEqual((await g.match(g.tokens[0])).body.code, room.code);
+  const stranger = await fetch(`${g.base}/api/rooms/${room.code}`, { headers: {Authorization:`Bearer ${g.tokens[1]}`} });
+  assert.equal(stranger.status, 403);
+  assert.equal((await request('demo_step', {round:0})).status, 409);
+  s = (await request('ready', {round:0})).body;
+  assert.equal(s.phase, 'playing');
+  const planned = room.players.slice(1).map(p=>p.plan.value);
+  assert.equal(room.botHistory.length, 0);
+  assert.ok(s.players.every(p => !('value' in p) && !('plan' in p) && !('token' in p)));
+  await request('submit', {round:1,value:100});
+  assert.deepEqual(room.players.slice(1).map(p=>p.plan.value), planned);
+  g.advance(7000);
+  s = (await request()).body;
+  assert.equal(s.phase, 'result');
+  assert.deepEqual(s.result.values.slice(1).map(p=>p.value), planned);
+  assert.ok(s.players.every(p=>p.score >= -1));
+  assert.equal(room.botHistory.length, 1);
+  assert.equal((await request('ready', {round:1})).status, 409);
+  // Play a complete game: real losses only, then observe automatic bot-only rounds.
+  let sawHumanElimination = false;
+  for (let i=0; i<120 && s.phase !== 'finished'; i++) {
+    if (s.phase === 'result') {
+      g.advance(s.announcementUntil - s.serverNow);
+      s = (await request()).body;
+      if (s.phase === 'result') s = (await request('ready', {round:s.round})).body;
+    }
+    if (s.phase === 'playing') {
+      const before = s.players.map(p=>p.score);
+      if (!s.me.eliminated) await request('submit', {round:s.round,value:100});
+      g.advance(7000);
+      s = (await request()).body;
+      for (const loss of s.result.losses) assert.equal(s.players[loss.seat-1].score, before[loss.seat-1] - loss.deduction);
+      sawHumanElimination ||= s.me.eliminated;
+    }
+  }
+  assert.equal(s.phase, 'finished');
+  assert.equal(sawHumanElimination, true);
+  assert.ok(room.botHistory.length <= 12);
+  const fresh = await create();
+  assert.notEqual(fresh.code, room.code);
+  assert.ok(fresh.players.every(p=>p.score===0));
+  assert.deepEqual(g.rooms.get(fresh.code).botHistory, []);
 });
 
 

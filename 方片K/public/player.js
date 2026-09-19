@@ -105,18 +105,20 @@ function render(state) {
   syncedAt = performance.now();
   const me = state.me;
   document.querySelector("#demoPanel").hidden = !state.demo;
+  document.querySelector("#soloPanel").hidden = !state.solo;
+  if (state.solo) setText("#connectionHint", "对局中离线不会暂停计时。同一浏览器再次选择单人挑战可恢复未结束的对局；服务器重启后无法恢复。");
   document.querySelector("#eliminationPanel").hidden = !me.eliminated;
   setText("#eliminationText", `最终得分 ${me.score} 分，已达到淘汰线。不能再选数或准备，可继续观看结果与剩余玩家对局。`);
   showAnnouncement(state);
-  setText("#roomInfo", `房间 ${code} / 座位 ${me.seat}`);
+  setText("#roomInfo", `${state.solo ? "单人挑战 / " : ""}房间 ${code} / 座位 ${me.seat}`);
   setText("#roundChip", state.round ? `第 ${state.round} 轮` : "等待开始");
   setText("#nameTitle", `${me.name} / ${me.score} 分`);
   if (document.activeElement !== nameInput) nameInput.value = me.name;
   if (me.submitted && state.phase === "playing") valueInput.value = me.value;
   const status = state.phase === "finished" ? (state.result.allEliminated ? "全员淘汰，本局无最终胜者。" : "游戏结束。")
-    : me.eliminated ? "你已淘汰，可以继续观看。"
+    : me.eliminated ? (state.solo ? "你已淘汰，机器人将在播报结束后自动继续，你可以观战。" : "你已淘汰，可以继续观看。")
     : state.phase === "playing" ? (me.submitted ? `已锁定数字 ${me.value}，等待结算。` : "请输入数字并确认提交。")
-    : me.ready ? "已准备，等待其他存活玩家。" : "阅读规则和结果后，点击准备。";
+    : me.ready ? "已准备，等待其他存活玩家。" : state.solo ? "机器人会自动准备。阅读规则和结果后，点击准备即可开局。" : "阅读规则和结果后，点击准备。";
   setText("#myStatus", state.demo && state.phase !== "finished" ? "点击上方“演示下一轮”查看下一个淘汰场景。" : status);
   readyBtn.textContent = state.phase === "lobby" ? "准备开始" : state.newRules.length ? "已读规则，准备下一轮" : "准备下一轮";
   document.querySelector("#newRulesPanel").hidden = !state.newRules.length || state.phase === "finished";

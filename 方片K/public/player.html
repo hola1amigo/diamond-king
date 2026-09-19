@@ -10,6 +10,7 @@
   <main class="app">
     <header><div><p class="eyebrow">ALICE IN BORDERLAND · 智力游戏</p><h1><span class="suit" aria-hidden="true">♦</span> 方片 K</h1><p class="muted" id="roomInfo">连接中</p></div><div class="chip" id="roundChip">等待开始</div></header>
     <section class="panel" id="demoPanel" hidden><h2>单人流程演示</h2><p>四名模拟玩家自动选数。每轮预设一人处于 −9 分，依次演示淘汰、规则解锁，最后演示你被淘汰。不是公平对战，也不影响真人房间。</p><button id="demoStepBtn">演示下一轮（自动选数）</button></section><section class="panel" id="eliminationPanel" hidden><h2 class="danger">你已淘汰</h2><p id="eliminationText"></p></section><section class="panel stack">
+      <div id="soloPanel" hidden><strong>单人挑战 · 四位策略机器人</strong><p class="muted">正常选数、计分与淘汰。机器人只参考本局已公开结果，每轮独立决定数字。</p><details><summary>认识你的对手</summary><p class="muted">砺石：偏稳健，参考较长历史。<br>逐流：更重视近期变化。<br>算子：倾向多推演一步。<br>逆锋：尝试反向预测。<br>四位都会随公开结果调整判断，不保证最优，也不会跨局记忆。</p></details></div>
       <h2 id="nameTitle">座位</h2>
       <p id="timer" role="timer">等待同步</p>
       <div class="grid">
@@ -22,7 +23,7 @@
         <button id="submitBtn" class="primary" disabled>确认提交（不可修改）</button>
       </div>
       <p class="muted" id="myStatus" aria-live="polite">等待同步。</p>
-      <p class="danger" id="error" aria-live="polite"></p><a href="/">返回首页／重新加入</a><p class="muted">开局前离线超过两分钟会释放座位。对局中离线不会暂停计时；同一浏览器重新加入可恢复座位。</p>
+      <p class="danger" id="error" aria-live="polite"></p><a href="/">返回首页／重新加入</a><p class="muted" id="connectionHint">开局前离线超过两分钟会释放座位。对局中离线不会暂停计时；同一浏览器重新加入可恢复座位。</p>
     </section>
     <section class="panel" id="newRulesPanel" style="margin-top:16px" hidden>
       <h2>追加规则</h2><ol id="newRules"></ol><p>按顺序阅读以上新规则，点击“已读规则，准备下一轮”确认。下一轮限时 5 分钟。</p>

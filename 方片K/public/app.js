@@ -55,6 +55,7 @@ function renderPlayers(el, players, phase, result) {
         <span class="score ${result?.losses.some(p => p.seat === player.seat && p.deduction) ? "score-change" : ""}">${player.score} 分</span>
       </div>
       <p class="muted">座位 ${player.seat}</p>
+      ${player.bot ? `<p class="bot-label">机器人 · ${escapeHtml(player.bot)}</p>` : ''}
       ${result?.winners.some(p => p.seat === player.seat) ? '<p class="winner-label">本轮获胜</p>' : ''}
       <p>${!player.joined ? "等待玩家加入" : player.eliminated ? '<span class="danger">已淘汰</span>' : phase === 'playing' ? (player.submitted ? '<span class="ok">已提交</span>' : '等待提交') : (player.ready ? '已准备' : '未准备')}</p>
     </article>
