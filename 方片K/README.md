@@ -47,24 +47,9 @@
 
 运行 `npm test`。二十一组测试覆盖自动分房、并发占座、身份恢复、等待座位释放，以及五人准备、隐私、身份校验、重复/过期提交、倒计时、追加规则、同时淘汰与完整对局。另覆盖机器人依据历史调整、私密预选、模式隔离，以及正常计分直至单人对局结束。自动化检查不代替五台真实设备的网络验收。
 
-## Render 免费试玩部署
+## 自行部署
 
-仓库根目录已准备 `render.yaml`，只创建一个 Free Web Service，不创建付费数据库。
-
-1. 注册 GitHub 与 Render 账号（已有 GitHub 可直接使用），在 Render 连接存放此项目的仓库。
-2. 建议建一个独立的私有 GitHub 仓库，只上传本项目的 `render.yaml` 和整个 `方片K` 文件夹，保持目录结构不变。
-3. 在 Render 选择 New → Blueprint，选择该仓库，使用根目录 `render.yaml`。确认服务计划为 Free，再创建。
-4. 如果手动选择 New → Web Service，则填写：Language = Node，Root Directory 留空（该字段不接受中文），Build Command = `node --test "方片K/server.test.js"`，Start Command = `node "方片K/server.js"`，Instance Type = Free，环境变量 `NODE_VERSION=22`，Health Check Path = `/health`。
-5. 部署成功后，把服务提供的 HTTPS 首页地址发给朋友；不要发 localhost、局域网 IP 或玩家页地址。
-6. 首次冷启动可能约一分钟，等待后再加入。使用五个独立浏览器身份检查是否进入同房、准备开局、私密提交及刷新恢复。
-
-Free 服务空闲 15 分钟会休眠，也可能被平台重启；内存中的房间会丢失。本版不承诺对局持久保存，不应开多个服务实例。
-
-官方参考：
-- https://render.com/docs/free
-- https://render.com/docs/blueprint-spec
-- https://render.com/docs/deploy-node-express-app
-
+请参考根目录的 [自行部署指南](../docs/DEPLOYMENT.md)：Fork 本仓库后连接自己的 Render 账号，或运行在自己的 Node.js 服务器。朋友打开你部署后的同一个 HTTPS 网址即可，无需每个人部署。
 
 ## 单人挑战
 
