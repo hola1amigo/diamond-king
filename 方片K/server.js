@@ -4,7 +4,7 @@ const os = require("os");
 const path = require("path");
 const fs = require("fs");
 const { evaluateRound } = require("./round");
-const { BOT_PROFILES, chooseBotDecision, reviewBotTactic } = require("./bots");
+const { BOT_PROFILES, chooseBotDecision, reviewBotTactic, seededRandom, createBotTemperament } = require("./bots");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
 const BASE_RULES = [
@@ -21,7 +21,7 @@ const EXTRA_RULES = [
 const stageFor = (count) => Math.min(3, 5 - count);
 const identity = (p) => ({ seat: p.seat, name: p.name });
 
-function createGameServer({ now = Date.now } = {}) {
+function createGameServer({ now = Date.now, botSeed = () => crypto.randomBytes(4).readUInt32LE(0), releaseCommit = process.env.RENDER_GIT_COMMIT } = {}) {
   const rooms = new Map();
   function createRoom() {
     let code;
@@ -51,7 +51,8 @@ function createGameServer({ now = Date.now } = {}) {
     if (room.solo || room.friend) {
       const players = room.players.filter(p => !p.eliminated).map(p => ({ seat: p.seat, score: p.score }));
       for (const p of room.players.filter(p => p.bot !== undefined && !p.eliminated)) {
-        p.plan = { ...chooseBotDecision({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage, round: room.round, tactics: p.tactics }), submitAt: now() + crypto.randomInt(2000, 6001) };
+        if (!p.botRandom) { p.botRandom=seededRandom(botSeed()); p.temperament=createBotTemperament(p.botRandom); }
+        p.plan = { ...chooseBotDecision({ seat: p.seat, profile: p.bot, players, history: room.botHistory, stage: room.stage, round: room.round, tactics: p.tactics, temperament: p.temperament }, p.botRandom), submitAt: now() + crypto.randomInt(2000, 6001) };
       }
     }
   }
@@ -127,7 +128,7 @@ function createGameServer({ now = Date.now } = {}) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://localhost");
-      if (req.method === "GET" && url.pathname === "/health") return sendJson(res, 200, { ok: true });
+      if (req.method === "GET" && url.pathname === "/health") return sendJson(res, 200, { ok: true, botStrategyVersion: "bounded-randomness-v1", commit: /^[a-f0-9]{40}$/i.test(releaseCommit || "") ? releaseCommit : null });
       if (req.method === "POST" && ["/api/match", "/api/demo", "/api/solo"].includes(url.pathname)) {
         const body = await readBody(req);
         const token = (req.headers.authorization || "").replace(/^Bearer /, "");
@@ -296,6 +297,7 @@ if (require.main === module) {
   });
 }
 module.exports = { createGameServer };
+
 
 
 

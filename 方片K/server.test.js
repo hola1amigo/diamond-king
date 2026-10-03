@@ -543,3 +543,5 @@ test("server privately reviews tactical choices after settlement and retains coo
  assert.equal(room.players[1].plan.tactic,null);
  assert.equal(room.players[1].tactics.failures,1);
 });
+// Keep the existing Render build command running the bot regression suite too.
+require("./bots-randomness.test");

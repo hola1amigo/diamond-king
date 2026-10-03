@@ -9,6 +9,21 @@ const BOT_PROFILES = [
 const clamp = value => Math.max(0, Math.min(100, Math.round(value)));
 const median = values => { const sorted = [...values].sort((a,b) => a-b); return sorted[Math.floor(sorted.length / 2)]; };
 
+// One private stream per bot/game: reproducible tests without shared plans.
+function seededRandom(seed) {
+  let state = seed >>> 0;
+  return () => { state = (state + 0x6D2B79F5) >>> 0; let t=state; t=Math.imul(t^t>>>15,t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; };
+}
+function createBotTemperament(random = Math.random) {
+  const between = (low, high) => low + (high-low)*random();
+  return Object.freeze({
+    priorShift: between(-4,4), riskScale: between(.9,1.1),
+    collisionScale: between(.9,1.1), pressureScale: between(.85,1.15),
+    weightScales: Object.freeze(Array.from({length:5},()=>between(.9,1.1))),
+    choiceWindow: between(2,6), exploration: between(.08,.18)
+  });
+}
+
 // Level 1 responds to observed behaviour. Higher levels additionally imagine
 // simultaneous opponent responses; the final decision always uses actual rules.
 function projectResponses(values, depth) {
@@ -40,8 +55,12 @@ function reasoningDepth(style, records, players) {
 
 // Input contains public scores and completed rounds only. No room, tokens,
 // current submissions, other bots' plans or cross-game memory are accessible.
-function chooseBotDecision({ seat, profile, players, history, stage, round = history.length + 1, tactics = {} }, random = Math.random) {
-  const style = BOT_PROFILES[profile];
+function chooseBotDecision({ seat, profile, players, history, stage, round = history.length + 1, tactics = {}, temperament = null }, random = Math.random) {
+  const base = BOT_PROFILES[profile];
+  const style = temperament ? { ...base, prior: clamp(base.prior+temperament.priorShift),
+    risk: base.risk*temperament.riskScale, collision: base.collision*temperament.collisionScale,
+    pressure: base.pressure*temperament.pressureScale,
+    weights: base.weights.map((weight,i)=>weight*temperament.weightScales[i]) } : base;
   const records = history.slice(-style.memory);
   const depth = players.length === 2 ? 1 : reasoningDepth(style, records, players);
   const opponents = players.filter(p => p.seat !== seat);
@@ -137,9 +156,16 @@ function chooseBotDecision({ seat, profile, players, history, stage, round = his
   }
   const best = Math.max(...scores);
   // Variation is restricted to near-best choices, never a uniform 0..100 draw.
-  const candidates = scores.map((score, value) => ({ score, value })).filter(p => p.score >= best - 2)
+  const ranked = scores.map((score, value) => ({ score, value })).sort((a,b)=>b.score-a.score || a.value-b.value);
+  const candidates = ranked.filter(p => p.score >= best - 2)
     .sort((a, b) => b.score - a.score).slice(0, 4);
-  const baseline = candidates[Math.floor(random() * candidates.length)].value;
+  let baseline = candidates[Math.floor(random() * candidates.length)].value;
+  // A small exploratory choice is still near-optimal under the SAME scenarios.
+  // Never broaden choices in a duel or at the elimination boundary.
+  if (temperament && players.length>2 && self.score>-8 && random()<temperament.exploration) {
+    const nearby=ranked.filter(p=>p.score>=best-temperament.choiceWindow).slice(0,8);
+    baseline=nearby[Math.floor(random()*nearby.length)].value;
+  }
   const normal = { value: baseline, tactic: null };
   // Spend only a bounded expected loss, and only when a predictable rival
   // loses more than we do. Never use a human/bot identity or another bot's plan.
@@ -174,4 +200,5 @@ function reviewBotTactic(tactics, tactic, seat, values, stage, round) {
   return {failures:(tactics.failures || 0)+(failed?1:0),cooldownUntil:round+(failed?4:2)};
 }
 
-module.exports = { BOT_PROFILES, chooseBotNumber, chooseBotDecision, reviewBotTactic };
+module.exports = { BOT_PROFILES, chooseBotNumber, chooseBotDecision, reviewBotTactic, seededRandom, createBotTemperament };
+
